@@ -12,6 +12,8 @@ the previous agent's chat or session todo database is not required.
 - Keep changes compatible with existing local grader/skill users.
 - Do not commit or push implementation/checklist changes until the user reviews
   and explicitly approves them. The existing public commit is documentation only.
+  Foundation commit `e8ad9cf` is local and unpushed; subsequent changes still need
+  separate review and approval.
 - No Azure deployment, paid inference, real student data or email without the
   relevant explicit approvals.
 - Local development is localhost-only and synthetic-data-only. SQLite is not the
@@ -39,5 +41,5 @@ Tick cases only after verification. Proposed cloud features and deployment tests
 remain unchecked until implemented and actually tested. Do not equate an approval
 attestation with permission to grade, or local JWT tests with live Entra deployment.
 
-Implementation currently includes untracked files. Check `git status --short`;
+Pending increments may include untracked files. Check `git status --short`;
 an empty `git diff` does not mean there is no pending code.

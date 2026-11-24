@@ -1,13 +1,10 @@
 import json
-import socket
 import zipfile
 from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
 from conftest import create, headers, upload
-
-from handwriting_grader_cloud.preflight import EngineInputValidator
 
 pytest.importorskip("handwriting_grader")
 pytestmark = pytest.mark.engine
@@ -49,20 +46,6 @@ def synthetic_files(
         "roster": roster_bytes.getvalue(),
         "rubric": rubric_bytes.getvalue(),
     }
-
-
-@pytest.fixture(autouse=True)
-def real_engine_without_network(service, monkeypatch):
-    from handwriting_grader.azure_ai import AzureClient
-
-    def forbidden(*_args, **_kwargs):
-        pytest.fail(
-            "Offline engine preflight must not construct Azure clients or access the network."
-        )
-
-    monkeypatch.setattr(AzureClient, "__init__", forbidden)
-    monkeypatch.setattr(socket.socket, "connect", forbidden)
-    service.validator = EngineInputValidator()
 
 
 def send_for_review(client, files):
@@ -122,6 +105,22 @@ def test_corrupt_pdf_is_rejected(client):
 )
 def test_roster_errors_are_rejected_by_existing_engine(client, changes):
     _, _, response = send_for_review(client, synthetic_files(**changes))
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "INVALID_INPUTS"
+
+
+def test_malformed_roster_xml_returns_validation_error_not_server_failure(client):
+    files = synthetic_files()
+    output = BytesIO()
+    with zipfile.ZipFile(BytesIO(files["roster"])) as source:
+        with zipfile.ZipFile(output, "w") as target:
+            for name in source.namelist():
+                target.writestr(
+                    name,
+                    b"<broken" if name == "xl/worksheets/sheet1.xml" else source.read(name),
+                )
+    files["roster"] = output.getvalue()
+    _, _, response = send_for_review(client, files)
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "INVALID_INPUTS"
 

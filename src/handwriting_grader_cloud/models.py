@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
-ArtifactKind = Literal["scans", "roster", "rubric"]
+ArtifactKind = Literal["scans", "roster", "rubric", "attendance"]
 
 
 class StrictModel(BaseModel):
@@ -24,3 +24,4 @@ class CreateExam(StrictModel):
 class ReviewApproval(StrictModel):
     snapshot_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     confirmed: StrictBool
+    attendance_confirmed: StrictBool = False

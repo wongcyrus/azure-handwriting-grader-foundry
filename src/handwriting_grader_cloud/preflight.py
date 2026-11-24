@@ -40,13 +40,14 @@ def engine_functions():
             "ENGINE_PIN_MISMATCH", "The installed engine is not the approved pin.", 503
         )
     try:
+        from handwriting_grader.attendance import attendance_rows
         from handwriting_grader.cli import check_exam
         from handwriting_grader.rubric import read_rubric
     except ImportError as error:
         raise ApplicationError(
             "ENGINE_UNAVAILABLE", "The pinned engine dependencies are unavailable.", 503
         ) from error
-    return check_exam, read_rubric
+    return check_exam, read_rubric, attendance_rows
 
 
 def check_workbook(content: bytes) -> None:
@@ -76,7 +77,7 @@ def check_workbook(content: bytes) -> None:
 
 class EngineInputValidator:
     def validate(self, document: dict, contents: dict[str, bytes]) -> dict:
-        check_exam, read_rubric = engine_functions()
+        check_exam, read_rubric, attendance_rows = engine_functions()
         try:
             for kind in ("roster", "rubric"):
                 check_workbook(contents[kind])
@@ -88,6 +89,9 @@ class EngineInputValidator:
         with tempfile.TemporaryDirectory(prefix="foundry-preflight-") as directory:
             root = Path(directory)
             paths = {"scans": "scans.pdf", "roster": "roster.xlsx", "rubric": "rubric.xlsx"}
+            explicit_attendance = "attendance" in contents
+            if explicit_attendance:
+                paths["attendance"] = "attendance.csv"
             for kind, filename in paths.items():
                 (root / filename).write_bytes(contents[kind])
             settings = document["settings"]
@@ -105,6 +109,15 @@ class EngineInputValidator:
                     "same_layout_for_all": settings.get("same_layout_for_all", False),
                 },
             }
+            if explicit_attendance:
+                config["exam"]["attendance"] = paths["attendance"]
+            try:
+                roster, statuses = attendance_rows(config, root)
+            except Exception as error:
+                code = "INVALID_ATTENDANCE" if explicit_attendance else "INVALID_INPUTS"
+                raise ApplicationError(
+                    code, "Roster or attendance is invalid. Review complete IDs and statuses."
+                ) from error
             issues, summary = check_exam(config, root)
             if issues:
                 raise ApplicationError(
@@ -125,11 +138,20 @@ class EngineInputValidator:
                 raise ApplicationError("INVALID_RUBRIC", "The total rubric marks must be finite.")
         return {
             "engine_commit": ENGINE_COMMIT,
-            "policy_version": 1,
+            "policy_version": 2,
             "summary": {
                 **summary,
                 "questions": len(questions),
                 "total_marks": total_marks,
-                "attendance_mode": "all_roster_students",
+                "roster_students": len(roster),
+                "attendance_mode": "explicit_csv" if explicit_attendance else "all_roster_students",
             },
+            "attendance_review": [
+                {
+                    "id": identifier,
+                    **student,
+                    "status": statuses[identifier] if statuses is not None else "present",
+                }
+                for identifier, student in roster.items()
+            ],
         }

@@ -8,7 +8,8 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 
 - Repository: `wongcyrus/azure-handwriting-grader-foundry`.
 - Published baseline: `a662755538d079f896a7ee5a6306a3c84f4c6a12`, docs-only.
-- Implementation and this checklist are local/uncommitted pending user review.
+- Verified foundation committed locally as `e8ad9cf` after explicit user approval;
+  it has not been pushed. The new attendance increment is uncommitted.
 - A fresh GitHub clone does not yet contain the application. Another agent must
   use this worktree until publication is explicitly approved.
 - Engine pin: `3b155f9232cb0730587d89677c932ea049dd7f71`.
@@ -24,7 +25,7 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | State/storage | SQLite local reference, optimistic ETags, retained artifacts and history |
 | Human inputs | Explicit scan order/common layout, snapshot-bound teacher attestation |
 | Engine bridge | Offline XLSX/PDF/roster/rubric preflight; provenance/integrity and revalidation |
-| Attendance | All roster students expected; absent-student workflow is not implemented |
+| Attendance | Optional complete CSV; present/absent preview and distinct teacher attestation; web UI pending |
 | Production Blob/Queue, budgets/jobs | Not implemented |
 | Skills/Foundry protocol/hosting | Not implemented |
 | Teacher browser UI/score review | Not implemented |
@@ -45,6 +46,7 @@ uv run --frozen --extra dev --extra engine pytest
 uv run --frozen --extra dev --extra engine ruff check .
 uv run --frozen --extra dev --extra engine ruff format --check .
 uv run --frozen --extra dev --extra engine python tools/smoke_review.py
+uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance
 ```
 
 Focused selectors:
@@ -52,6 +54,7 @@ Focused selectors:
 ```sh
 uv run --frozen --extra dev --extra engine pytest tests/test_preflight_gates.py tests/test_engine_preflight.py
 uv run --frozen --extra dev --extra engine pytest -m engine
+uv run --frozen --extra dev --extra engine pytest tests/test_attendance.py
 uv run --frozen --extra dev --extra engine pytest tests/test_api.py tests/test_auth.py tests/test_repository.py
 ```
 
@@ -76,19 +79,27 @@ uv run --frozen --extra dev --extra engine pytest --junitxml=.local/test-results
 Previous increment: 43 application tests, lint/format, live HTTP synthetic review
 and 2 pinned-engine workflow tests passed on 2026-11-24.
 
-Current preflight increment verified at **2026-11-24T15:00:39Z**:
+Foundation/preflight: 73 tests (53 core + 20 real-engine) verified at
+2026-11-24T15:00:39Z, then committed as `e8ad9cf`.
+
+Attendance increment verified at **2026-11-24T15:20:24Z**:
 
 | Check actually run | Result |
 |---|---|
-| Full application pytest suite with `dev` + `engine` extras | 73 passed, no skips; 53 core and 20 real-engine cases |
+| `pytest tests/test_attendance.py tests/test_engine_preflight.py` | Initial focused run: 41 passed; additional edge cases included in full run below |
+| Full application pytest suite with `dev` + `engine` extras and JUnit | 101 passed, no skips/failures/errors; 53 core and 48 real-engine cases |
 | `ruff check .` | Passed |
-| `ruff format --check .` | Passed; 20 Python files |
+| `ruff format --check .` | Passed; 21 Python files |
 | `python tools/smoke_review.py` | Passed; live HTTP with real synthetic PDF/XLSX and clean shutdown |
-| Documentation links/fences and test selectors | Passed; 35 executable selectors |
+| `python tools/smoke_review.py --attendance` | Passed; explicit present/absent preview, present-only PDF count and two teacher attestations |
+| Documentation links/fences and test selectors | Passed; 47 executable selectors |
 | `git diff --check` | Passed |
 
 Raw JUnit report: ignored `.local/test-results/pytest.xml`. No inference, Azure
-deployment or live Entra authentication was tested. Files remain uncommitted.
+deployment or live Entra authentication was tested.
+
+Attendance remains uncommitted pending review. Both smoke commands clean up their
+own localhost server and temporary files. No Azure resources were deployed.
 
 ## Local foundation regression cases
 
@@ -130,6 +141,9 @@ deployment or live Entra authentication was tested. Files remain uncommitted.
 - [x] `tests/test_engine_preflight.py::test_corrupt_pdf_is_rejected`.
 - [x] `tests/test_engine_preflight.py::test_roster_errors_are_rejected_by_existing_engine`:
   missing sheet/columns, duplicate IDs and empty roster.
+- [x] `tests/test_engine_preflight.py::test_malformed_roster_xml_returns_validation_error_not_server_failure`:
+  parser exceptions from the new attendance/roster precheck return a validation
+  error rather than a server failure.
 - [x] `tests/test_engine_preflight.py::test_invalid_or_formula_rubric_marks_are_rejected`.
 - [x] `tests/test_engine_preflight.py::test_non_workbook_and_expansion_limit_are_rejected`.
 - [x] `tests/test_engine_preflight.py::test_pdf_page_limit_is_enforced`.
@@ -145,7 +159,7 @@ deployment or live Entra authentication was tested. Files remain uncommitted.
 - [ ] Live tenant registration/token acquisition, revoked grants and deployment auth.
 - [ ] Separate API-owned control storage and worker-only artifact permissions.
 - [ ] Blob ETag conflict, immutable version reads, partial upload/finalization and retention.
-- [ ] Explicit attendance/presence review; absent students never inferred from scans.
+- [ ] Attendance web UI and school-policy acceptance of human presence review.
 - [ ] Full-page rendering/orientation/sequence and box validation in cloud review.
 - [ ] Hostile-parser resource isolation/timeouts; current local size/archive caps are not a production sandbox.
 - [ ] Teacher UI: coordinates under zoom/DPR, stale tabs, bulk preview, keyboard flow.
@@ -169,19 +183,37 @@ deployment or live Entra authentication was tested. Files remain uncommitted.
 ## Next-agent continuation
 
 1. Run the required commands above and inspect `git status --short`.
-2. Do not treat untracked implementation as already published.
-3. Next bounded task: explicit optional attendance input and review. Preserve the
-  full XLSX roster; validate CSV `ID,STATUS` using existing engine attendance rules;
-  require explicit present/absent decisions, bind them to the snapshot and check
-  PDF counts against present students. Never infer absence from missing scans.
-4. Acceptance: missing/duplicate/unknown attendance IDs, omitted rows, invalid
-  status and stale attendance review fail closed; absent students are not marked
-  zero; all-roster default remains explicitly represented. No grading or paid call.
-5. Then implement page rendering/region review with canonical coordinates and
-  existing validators; keep the engine's scan checks before later grading.
+2. Do not treat locally committed or untracked implementation as already published.
+3. Next bounded task: offline rendered page previews
+  and manual region review. Use the pinned renderer and existing region validators;
+  store page dimensions/provenance and canonical coordinates.
+4. Acceptance: unauthorized/stale edits, invalid page/question IDs, out-of-bounds
+  boxes and changed scans/rubric invalidate the relevant review. Test zoom/DPR
+  conversions when adding UI. No suggestion model or paid call is needed.
+5. Keep the engine's orientation/sequence checks before later grading; page count
+  alone cannot establish correct scans or student identity.
 6. Add focused positive/negative integration tests and a reproducible smoke path.
 7. Update this checklist with observed results and remaining gates.
 
 Cloud resources, paid tests, real student evaluation, commits and publication
 remain separate user decisions. M0 school/region/privacy/budget decisions are not
 resolved merely because local tests pass.
+
+## Attendance increment cases
+
+- [x] `tests/test_attendance.py::test_present_counts_and_distinct_attendance_approval_are_durable`:
+  full roster retained, text IDs preserved, absent not zero, two atomic attestations,
+  UTF-8/BOM acceptance, persistence and duplicate submission conflict.
+- [x] `tests/test_attendance.py::test_attendance_needs_its_own_literal_confirmation`.
+- [x] `tests/test_attendance.py::test_invalid_attendance_cannot_enter_review`:
+  omitted/duplicate/unknown IDs, invalid/empty status, no present student, leading
+  zero mismatch, padded ID, incorrect/extra headers and invalid UTF-8.
+- [x] `tests/test_attendance.py::test_pdf_counts_follow_present_students_not_the_full_roster`.
+- [x] `tests/test_attendance.py::test_no_csv_preserves_explicit_all_roster_default`.
+- [x] `tests/test_attendance.py::test_changed_attendance_invalidates_both_approvals_without_erasing_history`.
+- [x] `tests/test_attendance.py::test_corrupt_attendance_after_review_blocks_both_approvals`.
+- [x] `tests/test_attendance.py::test_attendance_preview_and_approval_are_exam_scoped`.
+- [x] `tests/test_attendance.py::test_changed_settings_invalidate_both_current_approvals`.
+- [x] `tests/test_attendance.py::test_wrong_snapshot_with_current_etag_cannot_approve_attendance`.
+- [x] `tests/test_attendance.py::test_concurrent_change_cannot_persist_either_attestation`.
+- [x] Live HTTP smoke with `tools/smoke_review.py --attendance`.

@@ -1,3 +1,4 @@
+import socket
 from pathlib import Path
 
 import pytest
@@ -6,6 +7,7 @@ from fastapi.testclient import TestClient
 from handwriting_grader_cloud.api import create_app
 from handwriting_grader_cloud.auth import Principal
 from handwriting_grader_cloud.errors import ApplicationError
+from handwriting_grader_cloud.preflight import EngineInputValidator
 from handwriting_grader_cloud.repository import SQLiteRepository
 from handwriting_grader_cloud.service import ExamService
 
@@ -40,6 +42,21 @@ class FakeInputValidator:
 @pytest.fixture
 def service(tmp_path: Path):
     return ExamService(SQLiteRepository(tmp_path / "control.sqlite3"), FakeInputValidator())
+
+
+@pytest.fixture(autouse=True)
+def real_engine_without_network(request, monkeypatch):
+    if request.node.get_closest_marker("engine") is None:
+        return
+    service = request.getfixturevalue("service")
+    from handwriting_grader.azure_ai import AzureClient
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("Offline engine tests must not construct Azure clients or access the network.")
+
+    monkeypatch.setattr(AzureClient, "__init__", forbidden)
+    monkeypatch.setattr(socket.socket, "connect", forbidden)
+    service.validator = EngineInputValidator()
 
 
 @pytest.fixture

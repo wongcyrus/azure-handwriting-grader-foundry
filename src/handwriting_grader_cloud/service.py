@@ -65,6 +65,7 @@ class ExamService:
             "artifacts": {},
             "approvals": [],
             "current_approval": None,
+            "current_attendance_approval": None,
             "preflight": None,
             "history": [],
         }
@@ -110,6 +111,7 @@ class ExamService:
         document["input_revision"] += 1
         document["state"] = "SETUP"
         document["current_approval"] = None
+        document["current_attendance_approval"] = None
         document["preflight"] = None
         self.record(document, principal, f"uploaded_{kind}")
         return self.save(document, expected, (artifact_id, content))
@@ -120,6 +122,7 @@ class ExamService:
         document["input_revision"] += 1
         document["state"] = "SETUP"
         document["current_approval"] = None
+        document["current_attendance_approval"] = None
         document["preflight"] = None
         self.record(document, principal, "updated_settings")
         return self.save(document, expected)
@@ -128,7 +131,7 @@ class ExamService:
         document = self.current(principal, exam_id, expected)
         if document["state"] != "SETUP":
             raise ApplicationError("INVALID_STATE", "Only setup inputs can enter review.", 409)
-        if set(document["artifacts"]) != {"scans", "roster", "rubric"}:
+        if not {"scans", "roster", "rubric"}.issubset(document["artifacts"]):
             raise ApplicationError("MISSING_INPUTS", "Upload scans, a roster and a rubric first.")
         if (
             not document["settings"]["scan_order_confirmed"]
@@ -154,6 +157,12 @@ class ExamService:
             raise ApplicationError("INVALID_STATE", "This exam is not awaiting input review.", 409)
         if request.confirmed is not True:
             raise ApplicationError("APPROVAL_REQUIRED", "Explicit confirmation is required.")
+        has_attendance = "attendance" in document["artifacts"]
+        if has_attendance and request.attendance_confirmed is not True:
+            raise ApplicationError(
+                "ATTENDANCE_APPROVAL_REQUIRED",
+                "Explicitly confirm the reviewed present/absent attendance list.",
+            )
         if request.snapshot_sha256 != snapshot(document):
             raise ApplicationError("STALE_REVIEW", "The reviewed snapshot is not current.", 409)
         if (
@@ -177,6 +186,18 @@ class ExamService:
         }
         document["approvals"].append(approval)
         document["current_approval"] = approval["id"]
+        document["current_attendance_approval"] = None
+        if has_attendance:
+            attendance_approval = {
+                **approval,
+                "id": str(uuid4()),
+                "kind": "attendance_review_attestation",
+                "attendance_sha256": document["artifacts"]["attendance"]["sha256"],
+                "roster_sha256": document["artifacts"]["roster"]["sha256"],
+            }
+            document["approvals"].append(attendance_approval)
+            document["current_attendance_approval"] = attendance_approval["id"]
+            self.record(document, principal, "approved_attendance_review")
         document["state"] = "INPUTS_REVIEWED"
         self.record(document, principal, "approved_input_review")
         return self.save(document, expected)

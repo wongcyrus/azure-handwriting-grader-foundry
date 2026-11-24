@@ -8,9 +8,10 @@ The reusable grading engine is a pinned optional dependency, not copied into thi
 **Test/agent handoff:** [Persistent checklist](docs/test-checklist.md) and
 [continuation instructions](AGENTS.md).
 
-**Publication status:** The initial public commit contains this README and the plan
-only. The tested implementation is local and awaiting review; setup commands below
-apply after those implementation files are published.
+**Publication status:** Public `main` currently contains the initial documentation
+only. The verified foundation is committed locally as `e8ad9cf`, not pushed.
+The attendance increment is local and uncommitted pending review. Setup commands
+below apply to this worktree or after implementation files are published.
 
 ## Implementation status
 
@@ -24,9 +25,10 @@ The current increment implements durable **local input review and offline engine
 - A SQLite reference store that survives application restarts.
 - Pinned-engine PDF/roster/rubric validation before review and again before approval.
 - Workbook expansion limits, snapshot integrity and engine-provenance checks.
+- Optional explicit attendance CSV, full roster/status preview and separate teacher attestation.
 
 **Not implemented:** production Blob/Queue adapters, page rendering/orientation review,
-attendance/box/score editors, pricing and budget gates, grading jobs,
+attendance web UI/box/score editors, pricing and budget gates, grading jobs,
 Foundry skill hosting, Terraform deployment or reports. Input-review attestation
 does **not** authorize grading. This increment contains no inference client or grading
 endpoint and cannot make paid model calls.
@@ -43,6 +45,7 @@ uv run --frozen --extra dev --extra engine pytest
 uv run --frozen --extra dev --extra engine ruff check .
 uv run --frozen --extra dev --extra engine ruff format --check .
 uv run --frozen --extra dev --extra engine python tools/smoke_review.py
+uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance
 ```
 
 Run with an ephemeral development token that is never printed:
@@ -69,7 +72,7 @@ Actual tenant registration, deployment and live Entra testing remain pending.
 | Create exam | `POST /api/exams` |
 | Read exam | `GET /api/exams/{id}` |
 | Update layout settings | `PUT /api/exams/{id}/settings` |
-| Upload scans, roster or rubric | `POST /api/exams/{id}/artifacts/{kind}` |
+| Upload scans, roster, rubric or attendance | `POST /api/exams/{id}/artifacts/{kind}` |
 | Download an owned artifact | `GET /api/exams/{id}/artifacts/{artifact}` |
 | Request input review | `POST /api/exams/{id}/review` |
 | Attest reviewed snapshot | `POST /api/exams/{id}/approvals` |
@@ -78,10 +81,13 @@ Mutations of an existing exam require its returned `If-Match` ETag, including qu
 Uploads use `application/octet-stream` and are limited to 10 MiB in this local increment.
 Input review requires a PDF scan, an XLSX roster with the selected sheet and
 `ID`, `NAME`, `CLASS` columns, and an XLSX rubric with the standard `Marking Scheme`
-sheet. DOCX extraction and attendance CSV are not yet exposed by this API.
+sheet. DOCX extraction is not yet exposed by this API.
 Both `scan_order_confirmed` and `same_layout_for_all` must be explicitly true;
-`roster_sheet` defaults to `Roster`. All roster students are expected: absences
-are not inferred. The PDF count must equal students times pages per student.
+`roster_sheet` defaults to `Roster`. Without attendance CSV all roster students
+are expected. An optional UTF-8 CSV requires exactly `ID,STATUS` headers and one
+row per roster ID, with `present` or `absent`. The engine rejects missing,
+duplicate/unknown IDs and a list with no present student. Absence is never inferred
+from missing scans. PDF count must equal present students times pages per student.
 
 The engine validates roster and rubric semantics. Local caps are 200 PDF pages,
 1,000 workbook archive entries and 16 MiB expanded data per workbook. These
@@ -89,10 +95,14 @@ limits do not replace future parser isolation/timeouts or page orientation revie
 Files that fail validation remain uploaded but cannot enter review.
 
 Approval requires `confirmed: true` and the returned `snapshot_sha256`.
+When CSV is supplied, `attendance_confirmed: true` is also required after inspecting
+`preflight.attendance_review`. The server atomically records a distinct attendance
+attestation bound to the CSV, roster and input snapshot. Absent students remain
+in the preview with status `absent`, never a zero mark.
 The backend derives teacher identity from authentication; callers cannot supply it.
 Concurrent or changed inputs produce a conflict instead of silently approving stale data.
 Preflight is repeated before approval, and changing inputs/settings clears current
-preflight and approval. Legacy review records without preflight cannot be approved;
+preflight and both current approvals, retaining history. Legacy review records without preflight cannot be approved;
 update settings and request a fresh review rather than manufacturing validation.
 
 ## Engine dependency

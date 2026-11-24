@@ -1,5 +1,6 @@
 """Reproducible local HTTP check using generated synthetic files, never model calls."""
 
+import argparse
 import json
 import os
 import secrets
@@ -17,10 +18,10 @@ from openpyxl import Workbook
 from pypdf import PdfWriter
 
 
-def synthetic_files():
+def synthetic_files(attendance=False):
     pdf = BytesIO()
     writer = PdfWriter()
-    for _ in range(4):
+    for _ in range(2 if attendance else 4):
         writer.add_blank_page(width=100, height=100)
     writer.write(pdf)
     writer.close()
@@ -39,14 +40,22 @@ def synthetic_files():
     rubric_bytes = BytesIO()
     rubric.save(rubric_bytes)
     rubric.close()
-    return {
+    files = {
         "scans": pdf.getvalue(),
         "roster": roster_bytes.getvalue(),
         "rubric": rubric_bytes.getvalue(),
     }
+    if attendance:
+        files["attendance"] = b"ID,STATUS\n001,present\n002,absent\n"
+    return files
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--attendance", action="store_true", help="Exercise explicit present/absent review"
+    )
+    args = parser.parse_args()
     with socket.socket() as candidate:
         candidate.bind(("127.0.0.1", 0))
         port = candidate.getsockname()[1]
@@ -118,7 +127,7 @@ def main():
                     },
                 )
                 exam_id = exam["id"]
-                for kind, content in synthetic_files().items():
+                for kind, content in synthetic_files(args.attendance).items():
                     exam, etag = call(
                         f"/api/exams/{exam_id}/artifacts/{kind}",
                         "POST",
@@ -127,19 +136,32 @@ def main():
                         binary=True,
                     )
                 exam, etag = call(f"/api/exams/{exam_id}/review", "POST", etag=etag)
-                assert exam["preflight"]["summary"]["students"] == 2
-                assert exam["preflight"]["summary"]["pdf_pages"] == 4
+                assert exam["preflight"]["summary"]["students"] == (1 if args.attendance else 2)
+                assert exam["preflight"]["summary"]["pdf_pages"] == (2 if args.attendance else 4)
+                assert exam["preflight"]["summary"]["absent"] == (1 if args.attendance else 0)
+                if args.attendance:
+                    assert [
+                        (row["id"], row["status"]) for row in exam["preflight"]["attendance_review"]
+                    ] == [("001", "present"), ("002", "absent")]
                 exam, _ = call(
                     f"/api/exams/{exam_id}/approvals",
                     "POST",
-                    {"snapshot_sha256": exam["snapshot_sha256"], "confirmed": True},
+                    {
+                        "snapshot_sha256": exam["snapshot_sha256"],
+                        "confirmed": True,
+                        "attendance_confirmed": args.attendance,
+                    },
                     etag,
                 )
                 assert exam["state"] == "INPUTS_REVIEWED"
-                assert len(exam["approvals"]) == 1
+                assert len(exam["approvals"]) == (2 if args.attendance else 1)
+                if args.attendance:
+                    assert exam["approvals"][1]["kind"] == "attendance_review_attestation"
+                    assert exam["current_attendance_approval"] == exam["approvals"][1]["id"]
+                mode = "explicit attendance" if args.attendance else "all-roster default"
                 print(
-                    "PASS: live localhost auth, synthetic PDF/XLSX inputs, pinned-engine "
-                    "preflight and hash-bound review attestation; no inference."
+                    f"PASS: live localhost auth, synthetic files, {mode}, pinned-engine "
+                    "preflight and hash-bound teacher attestation(s); no inference."
                 )
             finally:
                 process.terminate()
