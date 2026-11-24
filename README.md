@@ -9,13 +9,13 @@ The reusable grading engine is a pinned optional dependency, not copied into thi
 [continuation instructions](AGENTS.md).
 
 **Publication status:** Public `main` currently contains the initial documentation
-only. The verified foundation is committed locally as `e8ad9cf`, not pushed.
-The attendance increment is local and uncommitted pending review. Setup commands
+only. Foundation `e8ad9cf` and attendance `708cff1` are committed locally, not pushed.
+The region-review increment is local and uncommitted pending review. Setup commands
 below apply to this worktree or after implementation files are published.
 
 ## Implementation status
 
-The current increment implements durable **local input review and offline engine preflight**:
+The current increment implements durable **local input/region review and offline engine preflight**:
 
 - Bearer authentication: Entra delegated tokens or explicit synthetic development mode.
 - Owner/tenant checks and a Teacher role; worker/admin identities cannot impersonate review.
@@ -26,9 +26,11 @@ The current increment implements durable **local input review and offline engine
 - Pinned-engine PDF/roster/rubric validation before review and again before approval.
 - Workbook expansion limits, snapshot integrity and engine-provenance checks.
 - Optional explicit attendance CSV, full roster/status preview and separate teacher attestation.
+- Pinned-engine first-script JPEG previews and validated manual region drafts.
+- Separate region attestation with preserved approved geometry, hashes and page-review coverage.
 
-**Not implemented:** production Blob/Queue adapters, page rendering/orientation review,
-attendance web UI/box/score editors, pricing and budget gates, grading jobs,
+**Not implemented:** production Blob/Queue adapters, all-script orientation/sequence review,
+browser attendance/region/score editors, pricing and budget gates, grading jobs,
 Foundry skill hosting, Terraform deployment or reports. Input-review attestation
 does **not** authorize grading. This increment contains no inference client or grading
 endpoint and cannot make paid model calls.
@@ -46,6 +48,8 @@ uv run --frozen --extra dev --extra engine ruff check .
 uv run --frozen --extra dev --extra engine ruff format --check .
 uv run --frozen --extra dev --extra engine python tools/smoke_review.py
 uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance
+uv run --frozen --extra dev --extra engine python tools/smoke_review.py --regions
+uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance --regions
 ```
 
 Run with an ephemeral development token that is never printed:
@@ -76,6 +80,10 @@ Actual tenant registration, deployment and live Entra testing remain pending.
 | Download an owned artifact | `GET /api/exams/{id}/artifacts/{artifact}` |
 | Request input review | `POST /api/exams/{id}/review` |
 | Attest reviewed snapshot | `POST /api/exams/{id}/approvals` |
+| Prepare first-script template | `POST /api/exams/{id}/regions/prepare` |
+| Read owned template JPEG | `GET /api/exams/{id}/regions/pages/{index}` |
+| Save region draft | `PUT /api/exams/{id}/regions` |
+| Attest reviewed geometry | `POST /api/exams/{id}/regions/approvals` |
 
 Mutations of an existing exam require its returned `If-Match` ETag, including quotes.
 Uploads use `application/octet-stream` and are limited to 10 MiB in this local increment.
@@ -104,6 +112,39 @@ Concurrent or changed inputs produce a conflict instead of silently approving st
 Preflight is repeated before approval, and changing inputs/settings clears current
 preflight and both current approvals, retaining history. Legacy review records without preflight cannot be approved;
 update settings and request a fresh review rather than manufacturing validation.
+
+## Manual region review API
+
+After `INPUTS_REVIEWED`, prepare the first present student's script using the
+pinned engine's renderer. The returned `regions.pages` contains zero-based page
+indexes, immutable JPEG hashes and actual rendered dimensions. These previews
+are a common-layout template, **not** orientation/identity verification of all scans.
+Embedded PDF rotation is reflected in rendered dimensions.
+
+Save a draft with the current input `snapshot_sha256`, `annotations` keyed by
+page index strings (`"0"`, `"1"`, etc.), and explicit `reviewed_pages` indexes.
+Each box contains integer `x`, `y`, `width`, `height`, and a `label`. Coordinates
+are **200-DPI rendered pixels from the top-left**, not PDF points, browser CSS
+pixels or normalized fractions. The browser canvas and zoom/DPR conversion are
+not implemented yet.
+
+The pinned engine validates bounds, metadata labels and complete layouts. Draft
+question labels must match the reviewed rubric; canonical aliases such as `Q1`
+are supported. Approval requires NAME, ID and CLASS, ID on page zero, unique
+canonical labels, every rubric question and every template page explicitly
+reviewed. Submit the current input `snapshot_sha256`, the returned
+`regions.review_sha256` as `regions_sha256`, and `confirmed: true`.
+Success enters `REGIONS_REVIEWED`; it does **not** authorize grading.
+
+Draft changes invalidate region approval only and preserve approved geometry in
+attestation history. Any input/settings change invalidates previews and current
+input/attendance/region approvals. Stale ETags/hashes, corrupt bytes or a changed
+engine pin fail closed. JPEGs and the manifest commit atomically.
+
+Local rendering is serialized per process. Admission caps are 4 million pixels
+per page and 24 million per template, with a 10 MiB encoded-image cap. The fixed
+200-DPI renderer requires `pypdfium2`; no unchecked fallback is used. These
+controls do not replace production native-parser isolation/timeouts.
 
 ## Engine dependency
 

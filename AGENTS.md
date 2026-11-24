@@ -12,8 +12,8 @@ the previous agent's chat or session todo database is not required.
 - Keep changes compatible with existing local grader/skill users.
 - Do not commit or push implementation/checklist changes until the user reviews
   and explicitly approves them. The existing public commit is documentation only.
-  Foundation commit `e8ad9cf` is local and unpushed; subsequent changes still need
-  separate review and approval.
+  Foundation `e8ad9cf` and attendance `708cff1` are local and unpushed; subsequent
+  changes still need separate review and approval.
 - No Azure deployment, paid inference, real student data or email without the
   relevant explicit approvals.
 - Local development is localhost-only and synthetic-data-only. SQLite is not the
@@ -22,6 +22,9 @@ the previous agent's chat or session todo database is not required.
   hashes, engine provenance or validation gates to make tests pass.
 - Do not replace real engine integration tests with fake validators. Core tests
   intentionally isolate state/auth; engine-marked tests exercise the pinned engine.
+- Region previews use the first present script as the common-layout template,
+  not a verified view of every student's scan. Use 200-DPI rendered pixel
+  coordinates; retain PDFium's per-process serialization and pixel admission caps.
 
 ## Validation and handoff
 

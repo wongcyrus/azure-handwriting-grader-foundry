@@ -9,7 +9,8 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 - Repository: `wongcyrus/azure-handwriting-grader-foundry`.
 - Published baseline: `a662755538d079f896a7ee5a6306a3c84f4c6a12`, docs-only.
 - Verified foundation committed locally as `e8ad9cf` after explicit user approval;
-  it has not been pushed. The new attendance increment is uncommitted.
+  attendance committed as `708cff1` after explicit approval. Neither is pushed.
+  The new rendered-page/region-review increment is uncommitted.
 - A fresh GitHub clone does not yet contain the application. Another agent must
   use this worktree until publication is explicitly approved.
 - Engine pin: `3b155f9232cb0730587d89677c932ea049dd7f71`.
@@ -26,6 +27,7 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | Human inputs | Explicit scan order/common layout, snapshot-bound teacher attestation |
 | Engine bridge | Offline XLSX/PDF/roster/rubric preflight; provenance/integrity and revalidation |
 | Attendance | Optional complete CSV; present/absent preview and distinct teacher attestation; web UI pending |
+| Region review | First-present-script JPEG template, actual pixel dimensions, validated drafts and separate geometry attestation; canvas pending |
 | Production Blob/Queue, budgets/jobs | Not implemented |
 | Skills/Foundry protocol/hosting | Not implemented |
 | Teacher browser UI/score review | Not implemented |
@@ -33,8 +35,9 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | Grading/reports/delivery | Not implemented; no paid or grading endpoint |
 
 Input review does not authorize grading. PDF counts do not prove correct scan
-order/identity. No orientation/alignment/rendering check is implemented in this
-API yet; preserve the engine's downstream checks when integrating grading.
+order/identity. Template rendering honors embedded PDF rotation but does not
+validate orientation/alignment/sequence of all scripts. Preserve the engine's
+downstream checks when integrating grading.
 
 ## Reproducible validation commands
 
@@ -47,6 +50,8 @@ uv run --frozen --extra dev --extra engine ruff check .
 uv run --frozen --extra dev --extra engine ruff format --check .
 uv run --frozen --extra dev --extra engine python tools/smoke_review.py
 uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance
+uv run --frozen --extra dev --extra engine python tools/smoke_review.py --regions
+uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance --regions
 ```
 
 Focused selectors:
@@ -55,6 +60,7 @@ Focused selectors:
 uv run --frozen --extra dev --extra engine pytest tests/test_preflight_gates.py tests/test_engine_preflight.py
 uv run --frozen --extra dev --extra engine pytest -m engine
 uv run --frozen --extra dev --extra engine pytest tests/test_attendance.py
+uv run --frozen --extra dev --extra engine pytest tests/test_region_review.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_api.py tests/test_auth.py tests/test_repository.py
 ```
 
@@ -82,24 +88,29 @@ and 2 pinned-engine workflow tests passed on 2026-11-24.
 Foundation/preflight: 73 tests (53 core + 20 real-engine) verified at
 2026-11-24T15:00:39Z, then committed as `e8ad9cf`.
 
-Attendance increment verified at **2026-11-24T15:20:24Z**:
+Attendance: 101 tests (53 core + 48 real-engine) verified at
+2026-11-24T15:20:24Z, then committed as `708cff1`.
+
+Rendered-page/region-review increment verified at **2026-11-24T15:30:54Z**:
 
 | Check actually run | Result |
 |---|---|
-| `pytest tests/test_attendance.py tests/test_engine_preflight.py` | Initial focused run: 41 passed; additional edge cases included in full run below |
-| Full application pytest suite with `dev` + `engine` extras and JUnit | 101 passed, no skips/failures/errors; 53 core and 48 real-engine cases |
+| `pytest tests/test_region_review.py tests/test_repository.py` | 44 passed |
+| Full application pytest suite with `dev` + `engine` extras and JUnit | 144 passed, no skips/failures/errors; 54 core and 90 real-engine cases |
 | `ruff check .` | Passed |
-| `ruff format --check .` | Passed; 21 Python files |
+| `ruff format --check .` | Passed; 23 Python files |
 | `python tools/smoke_review.py` | Passed; live HTTP with real synthetic PDF/XLSX and clean shutdown |
 | `python tools/smoke_review.py --attendance` | Passed; explicit present/absent preview, present-only PDF count and two teacher attestations |
-| Documentation links/fences and test selectors | Passed; 47 executable selectors |
+| `python tools/smoke_review.py --regions` | Passed; native JPEGs, canonical draft, separate region attestation |
+| `python tools/smoke_review.py --attendance --regions` | Passed; combined flow, three distinct teacher attestations |
+| Documentation links/fences and test selectors | Passed; 64 executable selectors |
 | `git diff --check` | Passed |
 
 Raw JUnit report: ignored `.local/test-results/pytest.xml`. No inference, Azure
 deployment or live Entra authentication was tested.
 
-Attendance remains uncommitted pending review. Both smoke commands clean up their
-own localhost server and temporary files. No Azure resources were deployed.
+Region review remains uncommitted pending review. All smoke commands clean up
+their own localhost server and temporary files. No Azure resources were deployed.
 
 ## Local foundation regression cases
 
@@ -160,7 +171,8 @@ own localhost server and temporary files. No Azure resources were deployed.
 - [ ] Separate API-owned control storage and worker-only artifact permissions.
 - [ ] Blob ETag conflict, immutable version reads, partial upload/finalization and retention.
 - [ ] Attendance web UI and school-policy acceptance of human presence review.
-- [ ] Full-page rendering/orientation/sequence and box validation in cloud review.
+- [ ] All-script full-page review and orientation/sequence validation; current
+  template JPEGs and box validation do not establish these.
 - [ ] Hostile-parser resource isolation/timeouts; current local size/archive caps are not a production sandbox.
 - [ ] Teacher UI: coordinates under zoom/DPR, stale tabs, bulk preview, keyboard flow.
 - [ ] Score review: every row/identity, flagged/failed manual marks, finite ranges.
@@ -184,12 +196,12 @@ own localhost server and temporary files. No Azure resources were deployed.
 
 1. Run the required commands above and inspect `git status --short`.
 2. Do not treat locally committed or untracked implementation as already published.
-3. Next bounded task: offline rendered page previews
-  and manual region review. Use the pinned renderer and existing region validators;
-  store page dimensions/provenance and canonical coordinates.
-4. Acceptance: unauthorized/stale edits, invalid page/question IDs, out-of-bounds
-  boxes and changed scans/rubric invalidate the relevant review. Test zoom/DPR
-  conversions when adding UI. No suggestion model or paid call is needed.
+3. Next bounded task: teacher region-canvas frontend against the implemented API.
+  Keep local synthetic authentication separate from pending production Entra setup.
+4. Acceptance: map CSS/zoom/DPR coordinates to 200-DPI top-left image pixels,
+  support keyboard editing, require explicit page review, preserve unsaved edits
+  on ETag conflict and clear stale approval UI. Never submit approval automatically
+  on page load. Use real synthetic API flows rather than fabricated screenshots.
 5. Keep the engine's orientation/sequence checks before later grading; page count
   alone cannot establish correct scans or student identity.
 6. Add focused positive/negative integration tests and a reproducible smoke path.
@@ -217,3 +229,36 @@ resolved merely because local tests pass.
 - [x] `tests/test_attendance.py::test_wrong_snapshot_with_current_etag_cannot_approve_attendance`.
 - [x] `tests/test_attendance.py::test_concurrent_change_cannot_persist_either_attestation`.
 - [x] Live HTTP smoke with `tools/smoke_review.py --attendance`.
+
+## Rendered-page and region-review cases
+
+- [x] `tests/test_region_review.py::test_rendered_template_and_geometry_approval_survive_restart`:
+  real native JPEGs, dimension/hash provenance, protected download, snapshot-bound
+  geometry approval, restart persistence and duplicate approval conflict.
+- [x] `tests/test_region_review.py::test_inputs_must_be_approved_before_rendering`.
+- [x] `tests/test_region_review.py::test_invalid_drafts_do_not_change_review`:
+  missing/extra/padded page keys, unknown rubric question, bounds, invalid metadata
+  labels, float/bool coordinates and duplicate/unknown reviewed indexes.
+- [x] `tests/test_region_review.py::test_incomplete_geometry_cannot_be_approved`:
+  missing metadata/page review, ID on the wrong page and duplicate canonical aliases.
+- [x] `tests/test_region_review.py::test_every_rubric_question_requires_a_region`.
+- [x] `tests/test_region_review.py::test_region_approval_requires_literal_confirmation_and_current_hashes`.
+- [x] `tests/test_region_review.py::test_edits_invalidate_geometry_only_and_keep_approved_revision`.
+- [x] `tests/test_region_review.py::test_input_changes_invalidate_rendered_review`:
+  scan/roster/rubric/attendance/settings changes clear previews and current approvals.
+- [x] `tests/test_region_review.py::test_region_routes_are_owner_and_tenant_scoped`.
+- [x] `tests/test_region_review.py::test_corrupt_inputs_or_images_block_region_approval`.
+- [x] `tests/test_region_review.py::test_large_page_is_rejected_before_engine_render`.
+- [x] `tests/test_region_review.py::test_render_race_persists_neither_manifest_nor_images`.
+- [x] `tests/test_region_review.py::test_pdf_rotation_uses_rendered_dimensions_for_box_bounds`.
+- [x] `tests/test_region_review.py::test_template_pixel_limit_is_checked_before_rendering`.
+- [x] `tests/test_region_review.py::test_region_mutations_require_etags_and_page_indexes_are_bounded`.
+- [x] `tests/test_region_review.py::test_engine_change_after_rendering_blocks_region_approval`.
+- [x] `tests/test_repository.py::test_multi_artifact_failure_rolls_back_manifest_and_all_images`.
+- [x] Live HTTP smoke with `--regions` and combined `--attendance --regions`.
+
+Native rendering is serialized per process and uses the pinned `prepare_regions`
+adapter at 200 DPI. Caps are 4 million pixels/page, 24 million/template and 10 MiB
+per JPEG. No engine approval files are materialized and no model endpoint is called.
+Process isolation, render timeouts, all-script scan checks and production storage
+remain unverified future work.

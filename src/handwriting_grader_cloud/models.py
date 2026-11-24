@@ -1,6 +1,6 @@
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 
 ArtifactKind = Literal["scans", "roster", "rubric", "attendance"]
 
@@ -25,3 +25,25 @@ class ReviewApproval(StrictModel):
     snapshot_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     confirmed: StrictBool
     attendance_confirmed: StrictBool = False
+
+
+class RegionBox(StrictModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
+    x: StrictInt = Field(ge=0)
+    y: StrictInt = Field(ge=0)
+    width: StrictInt = Field(gt=0)
+    height: StrictInt = Field(gt=0)
+    label: StrictStr = Field(min_length=1, max_length=64)
+
+
+class RegionDraft(StrictModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
+    snapshot_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    annotations: dict[str, Annotated[list[RegionBox], Field(max_length=500)]] = Field(max_length=20)
+    reviewed_pages: list[StrictInt] = Field(max_length=20)
+
+
+class RegionApproval(StrictModel):
+    snapshot_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    regions_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    confirmed: StrictBool

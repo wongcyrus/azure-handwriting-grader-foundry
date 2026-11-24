@@ -8,7 +8,14 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .auth import Authenticator, Principal
 from .errors import ApplicationError
-from .models import ArtifactKind, CreateExam, ExamSettings, ReviewApproval
+from .models import (
+    ArtifactKind,
+    CreateExam,
+    ExamSettings,
+    RegionApproval,
+    RegionDraft,
+    ReviewApproval,
+)
 from .service import ExamService
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -106,5 +113,25 @@ def create_app(service: ExamService, authenticator: Authenticator) -> FastAPI:
     @app.post("/api/exams/{exam_id}/approvals")
     def approve(exam_id: UUID, request: ReviewApproval, caller: teacher, expected: version):
         return result(service.approve(caller, str(exam_id), expected, request))
+
+    @app.post("/api/exams/{exam_id}/regions/prepare")
+    def prepare_regions(exam_id: UUID, caller: teacher, expected: version):
+        return result(service.prepare_regions(caller, str(exam_id), expected))
+
+    @app.get("/api/exams/{exam_id}/regions/pages/{page_index}")
+    def region_page(exam_id: UUID, page_index: int, caller: teacher):
+        return Response(
+            service.region_page(caller, str(exam_id), page_index),
+            media_type="image/jpeg",
+            headers={"Content-Security-Policy": "sandbox; default-src 'none'"},
+        )
+
+    @app.put("/api/exams/{exam_id}/regions")
+    def save_regions(exam_id: UUID, request: RegionDraft, caller: teacher, expected: version):
+        return result(service.save_regions(caller, str(exam_id), expected, request))
+
+    @app.post("/api/exams/{exam_id}/regions/approvals")
+    def approve_regions(exam_id: UUID, request: RegionApproval, caller: teacher, expected: version):
+        return result(service.approve_regions(caller, str(exam_id), expected, request))
 
     return app

@@ -55,7 +55,11 @@ class SQLiteRepository:
         return json.loads(row[0])
 
     def save(
-        self, document: dict, expected_version: int, artifact: tuple[str, bytes] | None = None
+        self,
+        document: dict,
+        expected_version: int,
+        artifact: tuple[str, bytes] | None = None,
+        artifacts: list[tuple[str, bytes]] | None = None,
     ) -> None:
         with self.connection() as connection:
             changed = connection.execute(
@@ -71,10 +75,13 @@ class SQLiteRepository:
                 raise ApplicationError(
                     "STALE_REVIEW", "The exam changed. Refresh and review the current version.", 409
                 )
+            pending = list(artifacts or [])
             if artifact is not None:
+                pending.append(artifact)
+            for artifact_id, content in pending:
                 connection.execute(
                     "INSERT INTO artifacts VALUES (?, ?, ?)",
-                    (artifact[0], document["id"], artifact[1]),
+                    (artifact_id, document["id"], content),
                 )
 
     def content(self, exam_id: str, artifact_id: str) -> bytes:

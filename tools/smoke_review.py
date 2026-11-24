@@ -55,6 +55,9 @@ def main():
     parser.add_argument(
         "--attendance", action="store_true", help="Exercise explicit present/absent review"
     )
+    parser.add_argument(
+        "--regions", action="store_true", help="Render and attest manual region review"
+    )
     args = parser.parse_args()
     with socket.socket() as candidate:
         candidate.bind(("127.0.0.1", 0))
@@ -80,7 +83,15 @@ def main():
             )
             base = f"http://127.0.0.1:{port}"
 
-            def call(path, method="GET", body=None, etag=None, authenticated=True, binary=False):
+            def call(
+                path,
+                method="GET",
+                body=None,
+                etag=None,
+                authenticated=True,
+                binary=False,
+                raw=False,
+            ):
                 headers = {
                     "Content-Type": "application/octet-stream" if binary else "application/json"
                 }
@@ -93,7 +104,8 @@ def main():
                     base + path, data=data, headers=headers, method=method
                 )
                 with urllib.request.urlopen(request, timeout=10) as response:
-                    return json.loads(response.read()), response.headers.get("ETag")
+                    content = response.read()
+                    return (content if raw else json.loads(content)), response.headers.get("ETag")
 
             try:
                 for _ in range(100):
@@ -143,7 +155,7 @@ def main():
                     assert [
                         (row["id"], row["status"]) for row in exam["preflight"]["attendance_review"]
                     ] == [("001", "present"), ("002", "absent")]
-                exam, _ = call(
+                exam, etag = call(
                     f"/api/exams/{exam_id}/approvals",
                     "POST",
                     {
@@ -158,7 +170,49 @@ def main():
                 if args.attendance:
                     assert exam["approvals"][1]["kind"] == "attendance_review_attestation"
                     assert exam["current_attendance_approval"] == exam["approvals"][1]["id"]
+                if args.regions:
+                    from PIL import Image
+
+                    exam, etag = call(f"/api/exams/{exam_id}/regions/prepare", "POST", etag=etag)
+                    for page in exam["regions"]["pages"]:
+                        image, _ = call(
+                            f"/api/exams/{exam_id}/regions/pages/{page['index']}", raw=True
+                        )
+                        with Image.open(BytesIO(image)) as rendered:
+                            assert rendered.size == (page["width"], page["height"])
+
+                    def box(label):
+                        return {"x": 0, "y": 0, "width": 20, "height": 20, "label": label}
+
+                    exam, etag = call(
+                        f"/api/exams/{exam_id}/regions",
+                        "PUT",
+                        {
+                            "snapshot_sha256": exam["snapshot_sha256"],
+                            "annotations": {
+                                "0": [box("ID"), box("NAME"), box("CLASS")],
+                                "1": [box("Q1")],
+                            },
+                            "reviewed_pages": [0, 1],
+                        },
+                        etag,
+                    )
+                    exam, etag = call(
+                        f"/api/exams/{exam_id}/regions/approvals",
+                        "POST",
+                        {
+                            "snapshot_sha256": exam["snapshot_sha256"],
+                            "regions_sha256": exam["regions"]["review_sha256"],
+                            "confirmed": True,
+                        },
+                        etag,
+                    )
+                    assert exam["state"] == "REGIONS_REVIEWED"
+                    assert len(exam["approvals"]) == (3 if args.attendance else 2)
+                    assert exam["approvals"][-1]["id"] == exam["current_region_approval"]
                 mode = "explicit attendance" if args.attendance else "all-roster default"
+                if args.regions:
+                    mode += " and rendered region review"
                 print(
                     f"PASS: live localhost auth, synthetic files, {mode}, pinned-engine "
                     "preflight and hash-bound teacher attestation(s); no inference."
