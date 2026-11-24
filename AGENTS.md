@@ -16,6 +16,7 @@ the previous agent's chat or session todo database is not required.
   and unpushed; subsequent changes still need separate review and approval.
   Teacher canvas is committed as `9f8e2f0`, also local only.
   Owned-exam selection is committed as `184875d`, also unpushed.
+  Input setup/review is committed as `bff8e5b`, also unpushed.
 - No Azure deployment, paid inference, real student data or email without the
   relevant explicit approvals.
 - Local development is localhost-only and synthetic-data-only. SQLite is not the
@@ -30,6 +31,8 @@ the previous agent's chat or session todo database is not required.
 - `apps/web` is the React/TypeScript local canvas. Its development proxy is
   localhost-only. Synthetic tokens live in memory, never URL/storage; production
   identity setup is pending. Browser tests use real synthetic API/renderer flows.
+- Offline CI runs only synthetic validation. Never add Azure credentials, real
+  student data or deployment steps to that workflow without separate approval.
 
 ## Validation and handoff
 

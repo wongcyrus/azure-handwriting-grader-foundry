@@ -1,0 +1,74 @@
+name: Offline application validation
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out reviewed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the locked Python toolchain
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+        with:
+          version: "0.12.17"
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Restore locked application and engine dependencies
+        run: uv sync --frozen --extra dev --extra engine
+
+      - name: Check Python
+        run: |
+          uv run --frozen --extra dev --extra engine ruff check .
+          uv run --frozen --extra dev --extra engine ruff format --check .
+          uv run --frozen --extra dev --extra engine pytest --junitxml=.local/test-results/pytest.xml
+
+      - name: Check offline HTTP integration
+        run: |
+          uv run --frozen --extra dev --extra engine python tools/smoke_review.py
+          uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance --regions
+
+      - name: Restore locked frontend dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Check frontend and real synthetic browser workflow
+        working-directory: apps/web
+        run: |
+          npm run build
+          npm run check
+          npm test
+          npm run test:browser
+
+      - name: Retain synthetic JUnit evidence only
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: synthetic-validation-results
+          path: |
+            .local/test-results/pytest.xml
+            .local/test-results/browser.xml
+          if-no-files-found: warn
+          retention-days: 7

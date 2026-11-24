@@ -11,7 +11,7 @@ The reusable grading engine is a pinned optional dependency, not copied into thi
 **Publication status:** Public `main` currently contains the initial documentation
 only. Foundation `e8ad9cf`, attendance `708cff1` and region review `9d05ab0` are local,
 not pushed. Canvas `9f8e2f0` and owned selection `184875d` are also local commits.
-Input setup/review is included in the latest authorized increment. Setup commands
+Input setup/review is committed as `bff8e5b`, also local only. Setup commands
 below apply to this worktree or after implementation files are published.
 
 ## Implementation status
@@ -162,6 +162,18 @@ Never replace this pin with floating `main`. Cloud dependencies stay in this app
 not in the reusable grader's default installation.
 
 No Azure resources, paid inference or production configuration are created by local setup.
+
+## Offline CI
+
+[The validation workflow](.github/workflows/validate.yml) runs locked Python and
+frontend checks plus the real synthetic browser workflow on Ubuntu 24.04.
+Official actions are pinned to reviewed commit hashes. It requests read-only
+repository access, uses no Azure credentials and performs no deployments/model
+calls. Only synthetic JUnit XML is uploaded, not databases or browser traces.
+
+Workflow lint and the equivalent local commands pass. **GitHub-hosted execution
+is unverified:** implementation/workflow publication has not been authorized or
+pushed. Production release/deployment CI remains a separate milestone.
 
 ## Local teacher canvas
 

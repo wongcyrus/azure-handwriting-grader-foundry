@@ -12,7 +12,8 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
   attendance committed as `708cff1` after explicit approval. Neither is pushed.
   Region review `9d05ab0` and canvas `9f8e2f0` are also unpushed.
   Owned-exam selection is committed as `184875d`, also unpushed. The user has
-  authorized committing verified input setup/review; no publication is authorized.
+  authorized committing verified input setup/review, now `bff8e5b` (unpushed).
+  The new offline CI workflow is uncommitted pending review; publication is not authorized.
 - A fresh GitHub clone does not yet contain the application. Another agent must
   use this worktree until publication is explicitly approved.
 - Engine pin: `3b155f9232cb0730587d89677c932ea049dd7f71`.
@@ -36,7 +37,8 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | Skills/Foundry protocol/hosting | Not implemented |
 | Teacher setup/input review | Local creation, raw uploads, layout settings, full roster/rubric/status preview and explicit input/attendance approval |
 | Score UI and production login | Not implemented; all browser flows remain synthetic localhost only |
-| Terraform/CI/cloud deployment | Not implemented |
+| Offline CI | Pinned-action workflow linted; equivalent local commands passed; GitHub-hosted execution unverified |
+| Terraform/release/cloud deployment | Not implemented |
 | Grading/reports/delivery | Not implemented; no paid or grading endpoint |
 
 Input review does not authorize grading. PDF counts do not prove correct scan
@@ -72,6 +74,16 @@ npm run test:browser
 Browser tests require the host's Google Chrome. Ports 18765/18766 must be free;
 the runner never reuses an unrelated server. Seed data and approvals are explicitly
 synthetic, not evidence of real human review or deployment.
+
+For workflow changes, also run:
+
+```sh
+actionlint .github/workflows/validate.yml
+```
+
+The observed local validator was actionlint 1.7.12, installed only after a missing
+tool error and checked against its official release SHA-256. The Ubuntu 24.04
+runner inventory lists Chrome, but hosted execution still requires publication.
 
 Focused selectors:
 
@@ -236,8 +248,9 @@ they were moved to file scope, then all four targeted input cases and the full
 
 1. Run the required commands above and inspect `git status --short`.
 2. Do not treat locally committed or untracked implementation as already published.
-3. Next bounded task: offline CI validation of the locked Python/React projects
-  and real synthetic browser workflow, without Azure credentials or deployment.
+3. Next bounded task: close legacy-preview/input-conflict browser edge cases,
+  then implement the immutable artifact/job bridge under the M3 plan. Do not
+  call grading or materialize unreviewed engine approvals to speed integration.
 4. Acceptance: no tenant/owner enumeration, bounded pagination, no plaintext
   credentials in URL/storage, and no automatic approvals. Preserve unsaved
   changes when switching an exam. Continue real synthetic API/browser testing.
@@ -351,3 +364,19 @@ records or private traces.
 - [ ] Legacy missing-preview and input-conflict reload browser fixtures.
 - [ ] Production direct-Blob uploads, progress/retry UX, editable rubric/roster
   grid, school validation and real Entra sign-in.
+
+## Offline CI verification
+
+- [x] `.github/workflows/validate.yml` passes actionlint 1.7.12.
+- [x] Official checkout/setup-node/setup-uv/upload-artifact releases resolved to
+  immutable commit SHAs; uv 0.12.17, Python 3.12 and Node 24 selected.
+- [x] Read-only contents permission, no persisted Git credentials, no Azure
+  credentials/deployment steps and no `pull_request_target` execution.
+- [x] Lockfile restore commands, Python/style checks, HTTP smoke, TS/build/style,
+  geometry tests and actual synthetic Chrome workflow are represented.
+- [x] Local equivalents: 155 Python, 6 geometry and 20 browser cases passed;
+  hosted results are not claimed.
+- [x] Evidence upload is restricted to synthetic JUnit XML; no raw database,
+  browser trace, student record or credential artifact is uploaded.
+- [ ] GitHub-hosted workflow execution, branch protection and release/deployment
+  workflow. These are not verified by local actionlint.
