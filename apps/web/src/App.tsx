@@ -3,7 +3,7 @@ import type { FormEvent, KeyboardEvent, PointerEvent } from "react";
 import { ApiError, request } from "./api";
 import { drawnBox, imagePoint, movedBox, validBox } from "./geometry";
 import type { Point } from "./geometry";
-import type { Box, Draft, Exam } from "./types";
+import type { Box, Draft, Exam, ExamList } from "./types";
 
 type Snapshot = { value: Exam; etag: string };
 const copyDraft = (exam: Exam): Draft | null =>
@@ -17,6 +17,9 @@ const copyDraft = (exam: Exam): Draft | null =>
 export function App() {
   const [tokenInput, setTokenInput] = useState("");
   const [examInput, setExamInput] = useState("");
+  const [owned, setOwned] = useState<ExamList["exams"]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [listed, setListed] = useState(false);
   const [token, setToken] = useState("");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -119,6 +122,32 @@ export function App() {
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : "Could not load exam.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadOwned(append = false) {
+    if (tokenInput.includes(".")) {
+      setError("Use a synthetic development token, not a real identity token.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const query =
+        append && cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+      const { value } = await request<ExamList>(
+        `/api/exams${query}`,
+        tokenInput,
+      );
+      setOwned(append ? [...owned, ...value.exams] : value.exams);
+      setCursor(value.next_cursor);
+      setListed(true);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Could not list exams.",
       );
     } finally {
       setBusy(false);
@@ -269,10 +298,51 @@ export function App() {
               type="password"
               autoComplete="off"
               value={tokenInput}
-              onChange={(event) => setTokenInput(event.target.value)}
+              onChange={(event) => {
+                setTokenInput(event.target.value);
+                setOwned([]);
+                setCursor(null);
+                setListed(false);
+              }}
               disabled={busy}
             />
           </label>
+          <button
+            type="button"
+            disabled={busy || tokenInput.length < 32}
+            onClick={() => void loadOwned()}
+          >
+            Show my exams
+          </button>
+          {listed && owned.length === 0 && (
+            <p>No owned exams yet. Use the local setup flow to create one.</p>
+          )}
+          {owned.length > 0 && (
+            <label>
+              Owned exam
+              <select
+                value={examInput}
+                disabled={busy}
+                onChange={(event) => setExamInput(event.target.value)}
+              >
+                <option value="">Choose an exam</option>
+                {owned.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.title} ({item.state})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {cursor && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void loadOwned(true)}
+            >
+              More owned exams
+            </button>
+          )}
           <button disabled={busy}>Load exam</button>
         </form>
       ) : (
@@ -301,6 +371,9 @@ export function App() {
                   return;
                 setToken("");
                 setTokenInput("");
+                setOwned([]);
+                setCursor(null);
+                setListed(false);
                 setSnapshot(null);
                 setDraft(null);
                 setDirty(false);

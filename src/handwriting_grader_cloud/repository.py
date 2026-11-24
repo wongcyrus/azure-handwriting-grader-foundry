@@ -26,6 +26,10 @@ class SQLiteRepository:
                     content BLOB NOT NULL,
                     FOREIGN KEY (exam_id) REFERENCES exams(id)
                 );
+                CREATE INDEX IF NOT EXISTS exams_owner ON exams (
+                    json_extract(document, '$.tenant_id'),
+                    json_extract(document, '$.owner_id'), id
+                );
                 """
             )
         path.chmod(0o600)
@@ -53,6 +57,26 @@ class SQLiteRepository:
         if row is None:
             raise ApplicationError("NOT_FOUND", "Exam not found.", 404)
         return json.loads(row[0])
+
+    def list_owned(self, tenant_id: str, owner_id: str, limit: int, after: str = "") -> dict:
+        with self.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, document FROM exams
+                WHERE json_extract(document, '$.tenant_id')=?
+                  AND json_extract(document, '$.owner_id')=? AND id>?
+                ORDER BY id LIMIT ?
+                """,
+                (tenant_id, owner_id, after, limit + 1),
+            ).fetchall()
+        summaries = []
+        for _, encoded in rows[:limit]:
+            document = json.loads(encoded)
+            summaries.append({key: document[key] for key in ("id", "title", "state", "version")})
+        return {
+            "exams": summaries,
+            "next_cursor": rows[limit - 1][0] if len(rows) > limit else None,
+        }
 
     def save(
         self,

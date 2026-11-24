@@ -10,8 +10,9 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 - Published baseline: `a662755538d079f896a7ee5a6306a3c84f4c6a12`, docs-only.
 - Verified foundation committed locally as `e8ad9cf` after explicit user approval;
   attendance committed as `708cff1` after explicit approval. Neither is pushed.
-  Region review committed as `9d05ab0`, also unpushed. The user has authorized
-  committing the verified canvas increment; no publication is authorized.
+  Region review `9d05ab0` and canvas `9f8e2f0` are also unpushed.
+  The user has authorized committing verified owned-exam selection; no publication
+  is authorized.
 - A fresh GitHub clone does not yet contain the application. Another agent must
   use this worktree until publication is explicitly approved.
 - Engine pin: `3b155f9232cb0730587d89677c932ea049dd7f71`.
@@ -24,6 +25,7 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 |---|---|
 | Auth | Local signed-JWT tests, strict delegated Entra token checks, explicit synthetic dev mode |
 | Exam access | Owner/tenant checks; no co-teacher/admin impersonation path |
+| Exam discovery | Owned summaries only, bounded UUID cursor paging and browser selection |
 | State/storage | SQLite local reference, optimistic ETags, retained artifacts and history |
 | Human inputs | Explicit scan order/common layout, snapshot-bound teacher attestation |
 | Engine bridge | Offline XLSX/PDF/roster/rubric preflight; provenance/integrity and revalidation |
@@ -110,23 +112,27 @@ Attendance: 101 tests (53 core + 48 real-engine) verified at
 Region review: 144 tests and four HTTP smoke modes verified at
 2026-11-24T15:30:54Z, then committed as `9d05ab0`.
 
-Teacher canvas verified at **2026-11-24T15:44:36Z**:
+Canvas: 144 Python, 6 geometry and 14 browser tests verified at
+2026-11-24T15:44:36Z, then committed as `9f8e2f0`.
+
+Owned-exam selection verified at **2026-11-24T15:50:54Z**:
 
 | Check actually run | Result |
 |---|---|
 | `pytest tests/test_region_review.py tests/test_repository.py` | 44 passed |
-| Full application pytest suite with `dev` + `engine` extras and JUnit | 144 passed, no skips/failures/errors; 54 core and 90 real-engine cases |
+| `pytest tests/test_exam_listing.py` | 11 passed |
+| Full application pytest suite with `dev` + `engine` extras and JUnit | 155 passed, no skips/failures/errors; 65 core and 90 real-engine cases |
 | `npm run build` | Strict TypeScript and production asset build passed |
 | `npm run check` | TypeScript and Prettier passed |
 | `npm test` | 6 geometry cases passed |
-| `npm run test:browser` | 14 real Chrome/API cases passed; DPR 1 and 2 |
+| `npm run test:browser` | 16 real Chrome/API cases passed; DPR 1 and 2 |
 | `ruff check .` | Passed |
-| `ruff format --check .` | Passed; 24 Python files |
+| `ruff format --check .` | Passed; 25 Python files |
 | `python tools/smoke_review.py` | Passed; live HTTP with real synthetic PDF/XLSX and clean shutdown |
 | `python tools/smoke_review.py --attendance` | Passed; explicit present/absent preview, present-only PDF count and two teacher attestations |
 | `python tools/smoke_review.py --regions` | Passed; native JPEGs, canonical draft, separate region attestation |
 | `python tools/smoke_review.py --attendance --regions` | Passed; combined flow, three distinct teacher attestations |
-| Documentation links/fences and test selectors | Passed; 64 executable selectors |
+| Documentation links/fences and test selectors | Passed; 70 executable selectors |
 | `git diff --check` | Passed |
 
 Raw JUnit report: ignored `.local/test-results/pytest.xml`. No inference, Azure
@@ -223,8 +229,8 @@ No Azure resources were deployed.
 
 1. Run the required commands above and inspect `git status --short`.
 2. Do not treat locally committed or untracked implementation as already published.
-3. Next bounded task: owned exam listing/selection, then the input upload/review
-  screens. Keep local synthetic authentication separate from pending Entra setup.
+3. Next bounded task: input creation/upload/review screens. Keep local synthetic
+  authentication separate from pending Entra setup.
 4. Acceptance: no tenant/owner enumeration, bounded pagination, no plaintext
   credentials in URL/storage, and no automatic approvals. Preserve unsaved
   changes when switching an exam. Continue real synthetic API/browser testing.
@@ -307,3 +313,16 @@ remain unverified future work.
 Ignored evidence: `.local/test-results/pytest.xml`, `browser.xml`, browser artifacts
 and `canvas.sqlite3` (synthetic only). Never publish credentials, real student
 records or private traces.
+
+## Owned exam selection cases
+
+- [x] `tests/test_exam_listing.py::test_listing_returns_only_owned_summaries`.
+- [x] `tests/test_exam_listing.py::test_cursor_pages_are_bounded_and_do_not_duplicate_exams`.
+- [x] `tests/test_exam_listing.py::test_no_owned_exams_returns_an_empty_collection`.
+- [x] `tests/test_exam_listing.py::test_invalid_paging_parameters_are_rejected`.
+- [x] `tests/test_exam_listing.py::test_listing_requires_authenticated_teacher`.
+- [x] `tests/test_exam_listing.py::test_query_parameters_cannot_override_authenticated_identity`.
+- [x] Real Chrome selection follows cursor pages, loads an owned exam without
+  manual UUID entry and clears summaries/credentials on disconnect (DPR 1/2).
+- [ ] Production listing index/Blob adapter, chronological ordering, concurrent
+  snapshot pagination and school exam-search UX.

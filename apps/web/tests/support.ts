@@ -7,7 +7,7 @@ export const FAKE_TOKEN = "synthetic-canvas-e2e-only-not-a-real-credential";
 export const API_BASE = "http://127.0.0.1:18765";
 export const authHeaders = { Authorization: `Bearer ${FAKE_TOKEN}` };
 
-export async function openExam(page: Page): Promise<string> {
+export function seedExam(): string {
   const output = execFileSync(
     "uv",
     [
@@ -29,6 +29,11 @@ export async function openExam(page: Page): Promise<string> {
     },
   );
   const { exam_id } = JSON.parse(output) as { exam_id: string };
+  return exam_id;
+}
+
+export async function openExam(page: Page): Promise<string> {
+  const exam_id = seedExam();
   await page.goto("/");
   await page.getByLabel("Exam ID", { exact: true }).fill(exam_id);
   await page.getByLabel("Synthetic development token").fill(FAKE_TOKEN);

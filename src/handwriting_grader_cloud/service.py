@@ -36,6 +36,10 @@ class ExamService:
         if "Teacher" not in principal.roles:
             raise ApplicationError("FORBIDDEN", "The Teacher role is required.", 403)
 
+    def list_owned(self, principal: Principal, limit: int, cursor: str = "") -> dict:
+        self.require_teacher(principal)
+        return self.repository.list_owned(principal.tenant_id, principal.object_id, limit, cursor)
+
     def owned(self, principal: Principal, exam_id: str) -> dict:
         self.require_teacher(principal)
         document = self.repository.get(exam_id)

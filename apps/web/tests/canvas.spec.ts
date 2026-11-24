@@ -5,6 +5,8 @@ import {
   authHeaders,
   currentExam,
   openExam,
+  seedExam,
+  FAKE_TOKEN,
 } from "./support";
 
 for (const zoom of [0.25, 0.5, 2]) {
@@ -204,4 +206,34 @@ test("credentials remain memory-only and a reload signs out", async ({
   await page.reload();
   await expect(page.getByLabel("Synthetic development token")).toHaveValue("");
   await expect(page.getByRole("button", { name: "Load exam" })).toBeVisible();
+});
+
+test("owned selection loads an exam without typing its UUID and clears on disconnect", async ({
+  page,
+}) => {
+  const id = seedExam();
+  await page.goto("/");
+  await page.getByLabel("Synthetic development token").fill(FAKE_TOKEN);
+  const show = page.getByRole("button", { name: "Show my exams", exact: true });
+  await show.click();
+  await expect(show).toBeEnabled();
+  const selector = page.getByRole("combobox", {
+    name: "Owned exam",
+    exact: true,
+  });
+  await expect(selector).toBeVisible();
+  while ((await selector.locator(`option[value="${id}"]`).count()) === 0) {
+    await page
+      .getByRole("button", { name: "More owned exams", exact: true })
+      .click();
+    await expect(show).toBeEnabled();
+  }
+  await selector.selectOption(id);
+  await page.getByRole("button", { name: "Load exam", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Synthetic canvas demonstration" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Disconnect", exact: true }).click();
+  await expect(selector).toHaveCount(0);
+  await expect(page.getByLabel("Synthetic development token")).toHaveValue("");
 });

@@ -34,3 +34,8 @@ export interface Exam {
   current_region_approval: string | null;
   regions: Regions | null;
 }
+
+export interface ExamList {
+  exams: { id: string; title: string; state: string; version: number }[];
+  next_cursor: string | null;
+}

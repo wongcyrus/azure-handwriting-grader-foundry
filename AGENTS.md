@@ -14,6 +14,7 @@ the previous agent's chat or session todo database is not required.
   and explicitly approves them. The existing public commit is documentation only.
   Foundation `e8ad9cf`, attendance `708cff1` and region review `9d05ab0` are local
   and unpushed; subsequent changes still need separate review and approval.
+  Teacher canvas is committed as `9f8e2f0`, also local only.
 - No Azure deployment, paid inference, real student data or email without the
   relevant explicit approvals.
 - Local development is localhost-only and synthetic-data-only. SQLite is not the

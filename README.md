@@ -10,7 +10,8 @@ The reusable grading engine is a pinned optional dependency, not copied into thi
 
 **Publication status:** Public `main` currently contains the initial documentation
 only. Foundation `e8ad9cf`, attendance `708cff1` and region review `9d05ab0` are local,
-not pushed. The verified teacher canvas is local in this increment. Setup commands
+not pushed. Teacher canvas `9f8e2f0` is also committed locally; owned-exam selection
+is included in the latest authorized increment. Setup commands
 below apply to this worktree or after implementation files are published.
 
 ## Implementation status
@@ -30,6 +31,7 @@ The current increment implements durable **local input/region review and offline
 - Separate region attestation with preserved approved geometry, hashes and page-review coverage.
 - React/TypeScript local canvas: pointer/keyboard editing, zoom, explicit page review,
   snapshot approval and conflict recovery without losing unsaved boxes.
+- Tenant/owner-scoped exam summaries with bounded cursor pagination and browser selection.
 
 **Not implemented:** production Blob/Queue adapters, all-script orientation/sequence review,
 production sign-in, exam setup/attendance/score screens, pricing and budget gates, grading jobs,
@@ -76,6 +78,7 @@ Actual tenant registration, deployment and live Entra testing remain pending.
 | Action | Route |
 |---|---|
 | Create exam | `POST /api/exams` |
+| List owned exam summaries | `GET /api/exams?limit=20&cursor={optional-uuid}` |
 | Read exam | `GET /api/exams/{id}` |
 | Update layout settings | `PUT /api/exams/{id}/settings` |
 | Upload scans, roster, rubric or attendance | `POST /api/exams/{id}/artifacts/{kind}` |
@@ -169,8 +172,12 @@ npm ci
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173`. Use the emitted exam ID and the matching synthetic
-development token in the password field. The seed creates synthetic input
+Open `http://127.0.0.1:5173`. Enter the matching synthetic development token and
+choose **Show my exams**, then select and load an owned exam. The emitted exam
+ID remains an optional developer shortcut. Listing returns only owned summaries,
+up to 50 per request, with a UUID keyset cursor. Ordering is by UUID, not creation
+time; refresh the listing to see new items before the current cursor.
+The seed creates synthetic input
 attestations for a demo, not evidence that a real teacher examined real scans.
 Never use real student data or real identity tokens. Tokens remain in browser
 memory only; refreshing signs out. Production Entra login is not implemented.

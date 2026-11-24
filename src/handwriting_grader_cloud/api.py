@@ -2,7 +2,7 @@ import re
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, Header, Request, Response
+from fastapi import Depends, FastAPI, Header, Query, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -71,6 +71,14 @@ def create_app(service: ExamService, authenticator: Authenticator) -> FastAPI:
         response = result(service.create(caller, request))
         response.status_code = 201
         return response
+
+    @app.get("/api/exams")
+    def list_exams(
+        caller: teacher,
+        limit: Annotated[int, Query(ge=1, le=50)] = 20,
+        cursor: UUID | None = None,
+    ):
+        return service.list_owned(caller, limit, str(cursor) if cursor else "")
 
     @app.get("/api/exams/{exam_id}")
     def get_exam(exam_id: UUID, caller: teacher):
