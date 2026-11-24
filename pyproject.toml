@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "azure-handwriting-grader-foundry"
+version = "0.1.0"
+description = "Human-reviewed teacher application for the Azure handwriting grader"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.30,<1",
+  "PyJWT[crypto]>=2.10,<3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "httpx2>=2.16,<3", "ruff>=0.9,<1"]
+engine = [
+  "azure-handwriting-grader-skills @ git+https://github.com/wongcyrus/azure-handwriting-grader-skills.git@3b155f9232cb0730587d89677c932ea049dd7f71",
+]
+
+[project.scripts]
+handwriting-foundry = "handwriting_grader_cloud.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/handwriting_grader_cloud"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = ["engine: offline integration requiring the pinned engine extra"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

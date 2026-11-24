@@ -10,6 +10,9 @@ Implementation has started with the limited local review API described in the
 [application README](../README.md). The rest of this document describes the target
 system, not completed functionality.
 
+Use the [persistent test checklist and handoff](test-checklist.md) for actual
+verified progress, exact test commands, pending cases and the next bounded task.
+
 This plan adds a teacher-facing web application and a skill-driven Microsoft
 Agent Framework agent hosted in Microsoft Foundry. It preserves the existing
 Python grading engine, reviewed-input checks, pricing verification, human score
