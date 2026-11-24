@@ -13,6 +13,7 @@ only. Foundation `e8ad9cf`, attendance `708cff1` and region review `9d05ab0` are
 not pushed. Canvas `9f8e2f0` and owned selection `184875d` are also local commits.
 Input setup/review `bff8e5b` and offline CI `7eb4ed8` are also local only. Setup commands
 below apply to this worktree or after implementation files are published.
+Input-edge browser regressions are committed as `66bc1eb`, also unpushed.
 
 ## Implementation status
 
@@ -34,6 +35,8 @@ The current increment implements durable **local input/region review and offline
 - Tenant/owner-scoped exam summaries with bounded cursor pagination and browser selection.
 - Browser exam creation, PDF/XLSX/CSV uploads, explicit layout settings and full
   roster/rubric/attendance preview before independent human approvals.
+- Internal offline approved-review workspace hydration and durable checkpoints:
+  original input/image references, fixed relative paths and byte-identical recovery.
 
 **Not implemented:** production Blob/Queue adapters, all-script orientation/sequence review,
 production sign-in, direct roster/rubric/score editors, pricing and budget gates, grading jobs,
@@ -44,6 +47,38 @@ endpoint and cannot make paid model calls.
 SQLite is a local reference backend, not the proposed production architecture.
 Development mode is for synthetic data only. The CLI binds to localhost in both modes.
 Do not expose this starter server publicly or upload real student records.
+
+### Offline review workspace bridge
+
+`WorkspaceBridge` is internal API/control code, not a new HTTP route or worker
+permission. It requires the authenticated owner's Teacher principal, current
+exam version and current input/region attestations, with a separate attendance
+attestation for explicit CSV. It reruns pinned-engine validation and rejects
+stale approvals, changed files or incompatible checkpoint provenance.
+
+```python
+from pathlib import Path
+
+from handwriting_grader_cloud.workspace import WorkspaceBridge
+
+# service and principal come from the authenticated API/control context.
+bridge = WorkspaceBridge(service, Path(".local/workspaces"))
+workspace = bridge.hydrate(principal, exam_id, current_version)
+recovered = bridge.restore(
+    principal, exam_id, current_version, workspace.checkpoint_id
+)
+```
+
+The root is server-controlled and must be private/non-symlink. Each workspace
+has an opaque generated directory; student names and checkpoint paths are not
+accepted as filesystem destinations. SQLite atomically saves the checkpoint
+and derived files after checking the exam version and all referenced bytes.
+Recovery reconstructs the same relative paths and file bytes in a new root.
+
+This is **not a grading-ready workspace**: it preserves API attestations in
+`review-context.json` but generates no engine `approval.json`, model config,
+grading manifest or job authority. Engine approval mapping, protected job
+contexts, leases/fencing, execution checkpoints and cloud storage remain pending.
 
 ## Local setup and tests
 

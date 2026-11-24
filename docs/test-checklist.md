@@ -14,8 +14,9 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
   Owned-exam selection is committed as `184875d`, also unpushed. The user has
   authorized committing verified input setup/review, now `bff8e5b` (unpushed).
   Offline CI is committed as `7eb4ed8` after explicit approval, also unpushed.
-  Browser input-edge regression tests and this handoff are uncommitted pending
-  review; publication is not authorized.
+  Browser input-edge regressions are committed as `66bc1eb` after explicit
+  approval, also unpushed. The offline review-workspace bridge and this handoff
+  are uncommitted pending review; publication is not authorized.
 - A fresh GitHub clone does not yet contain the application. Another agent must
   use this worktree until publication is explicitly approved.
 - Engine pin: `3b155f9232cb0730587d89677c932ea049dd7f71`.
@@ -32,6 +33,7 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | State/storage | SQLite local reference, optimistic ETags, retained artifacts and history |
 | Human inputs | Explicit scan order/common layout, snapshot-bound teacher attestation |
 | Engine bridge | Offline XLSX/PDF/roster/rubric preflight; provenance/integrity and revalidation |
+| Offline review workspace | Owner-scoped hydration, stable config/region paths and byte-identical recovery from immutable local checkpoint references |
 | Attendance | Optional complete CSV upload, status preview and independent teacher attestation; production acceptance pending |
 | Region review | First-present-script JPEG template, actual pixel dimensions, validated drafts and separate geometry attestation |
 | Local teacher canvas | React/TypeScript pointer/keyboard editing, CSS/zoom/DPR conversion, page review, approval and explicit conflict recovery |
@@ -94,6 +96,7 @@ uv run --frozen --extra dev --extra engine pytest tests/test_preflight_gates.py 
 uv run --frozen --extra dev --extra engine pytest -m engine
 uv run --frozen --extra dev --extra engine pytest tests/test_attendance.py
 uv run --frozen --extra dev --extra engine pytest tests/test_region_review.py tests/test_repository.py
+uv run --frozen --extra dev --extra engine pytest tests/test_workspace.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_api.py tests/test_auth.py tests/test_repository.py
 ```
 
@@ -197,6 +200,32 @@ and explicit discard/reload adopting current settings and clearing the error.
 Python sources are unchanged; the earlier 155-case pytest result above is
 retained, not presented as a new Python run for this browser-only increment.
 
+### Offline review-workspace verification
+
+Verified at **2026-11-24T16:29:22+00:00**:
+
+| Check actually run | Result |
+|---|---|
+| `pytest tests/test_workspace.py tests/test_repository.py` | 30 passed before adding the final restore-race case |
+| Full application pytest suite with `dev` + `engine` extras and JUnit | 184 passed, no failures/errors/skips; 68 core and 116 real-engine cases, including 26 workspace cases |
+| `pytest --collect-only -q -m engine` | Confirmed 116 engine-marked cases without rerunning tests |
+| `ruff check .` | Passed |
+| `ruff format --check .` | Passed; 27 Python files |
+| `python tools/smoke_review.py` | Passed; live synthetic default input workflow and clean shutdown |
+| `python tools/smoke_review.py --attendance --regions` | Passed; live explicit attendance plus native template/geometry workflow and clean shutdown |
+| Documentation links/fences, selectors and `git diff --check` | Passed; 83 executable Python selectors |
+
+The initial style check caught one long SQL string; it was split before test
+execution. Test assertions were corrected to use `ApplicationError.status`
+before the focused suite. The restore-race case was then added and covered by
+the full 184-case run. No test failure is recorded as a pass.
+
+Raw Python JUnit remains at ignored `.local/test-results/pytest.xml`.
+Frontend sources/contracts are unchanged; the prior 26 browser and 6 geometry
+results are retained, not claimed as new frontend runs for this backend increment.
+No dependencies changed or were restored. No inference, deployment or hosted CI
+execution occurred.
+
 ## Local foundation regression cases
 
 - [x] `tests/test_auth.py::test_valid_delegated_token`: signed delegated token accepted.
@@ -281,11 +310,12 @@ retained, not presented as a new Python run for this browser-only increment.
 
 1. Run the required commands above and inspect `git status --short`.
 2. Do not treat locally committed or untracked implementation as already published.
-3. Next bounded task: implement an offline immutable approved-artifact
-  hydration/checkpoint round trip as the first M3 bridge slice. Reject missing
-  or stale approvals, modified artifacts and incompatible snapshot/geometry
-  provenance; test worker replacement with synthetic data. Do not
-  call grading or materialize unreviewed engine approvals to speed integration.
+3. Next bounded task: design and implement offline engine approval-file mapping
+  from current API-owned input/attendance/region attestations, using exact pinned
+  engine contracts and synthetic compatibility tests. Keep mapping in the
+  authenticated control boundary, not an agent approval tool. Do not call
+  grading, invent approval times/identities or introduce model config/paid-stage
+  authority before the relevant gates.
 4. Acceptance: no tenant/owner enumeration, bounded pagination, no plaintext
   credentials in URL/storage, and no automatic approvals. Preserve unsaved
   changes when switching an exam. Continue real synthetic API/browser testing.
@@ -422,3 +452,44 @@ records or private traces.
   browser trace, student record or credential artifact is uploaded.
 - [ ] GitHub-hosted workflow execution, branch protection and release/deployment
   workflow. These are not verified by local actionlint.
+
+## Offline approved-review workspace cases
+
+This is the first M3 local bridge slice, not M3 completion or an engine execution
+checkpoint. The adapter is internal control code; StageWorker and Administrator
+roles cannot use it as teacher identities. Protected cloud job contexts remain
+unimplemented.
+
+- [x] `tests/test_workspace.py::test_approved_workspace_survives_replacement_without_invented_approvals`:
+  real PDF/XLSX and optional CSV, existing immutable input/image references,
+  new repository/service/root, byte-identical files/config/paths, real
+  `verify_run` and `check_exam`, unchanged API approval history/version.
+  Engine approval remains false; no engine approval files or model config.
+- [x] `tests/test_workspace.py::test_workspace_hydration_and_recovery_are_owner_scoped`:
+  other teacher/tenant, worker and admin rejected before filesystem writes.
+- [x] `tests/test_workspace.py::test_hydration_rejects_missing_or_incompatible_attestations`:
+  missing input/region approval, wrong actor/pin, mismatched saved geometry
+  and duplicate approval ID rejected.
+- [x] `tests/test_workspace.py::test_explicit_attendance_needs_its_separate_current_attestation`.
+- [x] `tests/test_workspace.py::test_changed_inputs_and_reapproved_geometry_cannot_restore_old_checkpoint`:
+  stale version, reapproved geometry and invalidated inputs cannot replay a checkpoint.
+- [x] `tests/test_workspace.py::test_corrupt_input_image_or_checkpoint_file_cannot_be_restored`.
+- [x] `tests/test_workspace.py::test_corrupt_checkpoint_metadata_is_rejected_before_filesystem_writes`:
+  traversal filename, wrong owner/pin and bad manifest hash rejected, including
+  modified metadata with a recomputed checksum.
+- [x] `tests/test_workspace.py::test_checkpoint_cannot_be_replayed_against_another_owned_exam`.
+- [x] `tests/test_workspace.py::test_hydration_race_publishes_neither_checkpoint_nor_partial_workspace`:
+  stale CAS inserts no checkpoint/derived blobs and removes its new workspace.
+- [x] `tests/test_workspace.py::test_restore_race_removes_only_the_new_workspace`:
+  final version check rejects an intervening edit; original workspace survives.
+- [x] `tests/test_workspace.py::test_workspace_root_must_be_private_and_not_a_symlink`.
+- [x] `tests/test_repository.py::test_checkpoint_failure_rolls_back_all_new_artifacts`:
+  missing/corrupt file references roll back all derived artifacts.
+- [x] `tests/test_repository.py::test_existing_checkpoint_cannot_be_replaced`:
+  insert-only checkpoint identity; duplicate insertion also rolls back new artifacts.
+- [ ] Engine approval-file mapping, normalized rubric workspace and explicit
+  attendance review artifacts, with authoritative API provenance.
+- [ ] Worker-scoped job context, outbox/leases/fencing, cloud Blob/Queue adapters,
+  grading manifests/call watermarks, cancellation and unknown-outcome recovery.
+- [ ] Checkpoint retention/garbage collection, disk quotas and production
+  process/filesystem isolation. A private local root is not a tenant sandbox.

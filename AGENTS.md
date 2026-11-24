@@ -18,6 +18,7 @@ the previous agent's chat or session todo database is not required.
   Owned-exam selection is committed as `184875d`, also unpushed.
   Input setup/review is committed as `bff8e5b`, also unpushed.
   Offline CI is committed as `7eb4ed8`, also unpushed.
+  Input-edge browser regressions are committed as `66bc1eb`, also unpushed.
 - No Azure deployment, paid inference, real student data or email without the
   relevant explicit approvals.
 - Local development is localhost-only and synthetic-data-only. SQLite is not the
@@ -34,6 +35,12 @@ the previous agent's chat or session todo database is not required.
   identity setup is pending. Browser tests use real synthetic API/renderer flows.
 - Offline CI runs only synthetic validation. Never add Azure credentials, real
   student data or deployment steps to that workflow without separate approval.
+- `WorkspaceBridge` is an internal offline review-workspace adapter. Hydration
+  and recovery require the current owner's authenticated Teacher principal and
+  current input/region attestations (plus explicit CSV attendance attestation).
+  Use a server-controlled private root, not caller-supplied paths. Checkpoints
+  do not authorize jobs; no engine approval files or model config are generated.
+  Preserve the checkpoint write transaction's version check and artifact hashes.
 
 ## Validation and handoff
 
