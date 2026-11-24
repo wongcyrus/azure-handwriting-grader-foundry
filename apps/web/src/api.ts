@@ -13,12 +13,20 @@ export async function request<T>(
   options: { method?: string; body?: unknown; etag?: string } = {},
 ): Promise<{ value: T; etag: string }> {
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
-  if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  const body = options.body;
+  if (body !== undefined)
+    headers["Content-Type"] =
+      body instanceof Blob ? "application/octet-stream" : "application/json";
   if (options.etag) headers["If-Match"] = options.etag;
   const response = await fetch(path, {
     method: options.method || "GET",
     headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    body:
+      body === undefined
+        ? undefined
+        : body instanceof Blob
+          ? body
+          : JSON.stringify(body),
     cache: "no-store",
   });
   const value = await response.json();

@@ -11,8 +11,8 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 - Verified foundation committed locally as `e8ad9cf` after explicit user approval;
   attendance committed as `708cff1` after explicit approval. Neither is pushed.
   Region review `9d05ab0` and canvas `9f8e2f0` are also unpushed.
-  The user has authorized committing verified owned-exam selection; no publication
-  is authorized.
+  Owned-exam selection is committed as `184875d`, also unpushed. The user has
+  authorized committing verified input setup/review; no publication is authorized.
 - A fresh GitHub clone does not yet contain the application. Another agent must
   use this worktree until publication is explicitly approved.
 - Engine pin: `3b155f9232cb0730587d89677c932ea049dd7f71`.
@@ -29,12 +29,13 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | State/storage | SQLite local reference, optimistic ETags, retained artifacts and history |
 | Human inputs | Explicit scan order/common layout, snapshot-bound teacher attestation |
 | Engine bridge | Offline XLSX/PDF/roster/rubric preflight; provenance/integrity and revalidation |
-| Attendance | Optional complete CSV; present/absent preview and distinct teacher attestation; web UI pending |
+| Attendance | Optional complete CSV upload, status preview and independent teacher attestation; production acceptance pending |
 | Region review | First-present-script JPEG template, actual pixel dimensions, validated drafts and separate geometry attestation |
 | Local teacher canvas | React/TypeScript pointer/keyboard editing, CSS/zoom/DPR conversion, page review, approval and explicit conflict recovery |
 | Production Blob/Queue, budgets/jobs | Not implemented |
 | Skills/Foundry protocol/hosting | Not implemented |
-| Teacher setup/attendance/score UI and production login | Not implemented; region canvas is synthetic localhost only |
+| Teacher setup/input review | Local creation, raw uploads, layout settings, full roster/rubric/status preview and explicit input/attendance approval |
+| Score UI and production login | Not implemented; all browser flows remain synthetic localhost only |
 | Terraform/CI/cloud deployment | Not implemented |
 | Grading/reports/delivery | Not implemented; no paid or grading endpoint |
 
@@ -115,7 +116,10 @@ Region review: 144 tests and four HTTP smoke modes verified at
 Canvas: 144 Python, 6 geometry and 14 browser tests verified at
 2026-11-24T15:44:36Z, then committed as `9f8e2f0`.
 
-Owned-exam selection verified at **2026-11-24T15:50:54Z**:
+Owned-exam selection: 155 Python and 16 browser tests verified at
+2026-11-24T15:50:54Z, then committed as `184875d`.
+
+Input setup/review verified at **2026-11-24T16:00:52Z**:
 
 | Check actually run | Result |
 |---|---|
@@ -125,7 +129,7 @@ Owned-exam selection verified at **2026-11-24T15:50:54Z**:
 | `npm run build` | Strict TypeScript and production asset build passed |
 | `npm run check` | TypeScript and Prettier passed |
 | `npm test` | 6 geometry cases passed |
-| `npm run test:browser` | 16 real Chrome/API cases passed; DPR 1 and 2 |
+| `npm run test:browser` | 20 real Chrome/API cases passed; DPR 1 and 2 |
 | `ruff check .` | Passed |
 | `ruff format --check .` | Passed; 25 Python files |
 | `python tools/smoke_review.py` | Passed; live HTTP with real synthetic PDF/XLSX and clean shutdown |
@@ -144,6 +148,9 @@ passed, followed by the full 14-case run. No failed case is reported as passed.
 Browser services stopped: ports 18765/18766 were verified closed afterward.
 All smoke commands clean up their own localhost server and temporary files.
 No Azure resources were deployed.
+Input test discovery initially exposed incorrectly nested new test declarations;
+they were moved to file scope, then all four targeted input cases and the full
+20-case browser suite passed.
 
 ## Local foundation regression cases
 
@@ -229,8 +236,8 @@ No Azure resources were deployed.
 
 1. Run the required commands above and inspect `git status --short`.
 2. Do not treat locally committed or untracked implementation as already published.
-3. Next bounded task: input creation/upload/review screens. Keep local synthetic
-  authentication separate from pending Entra setup.
+3. Next bounded task: offline CI validation of the locked Python/React projects
+  and real synthetic browser workflow, without Azure credentials or deployment.
 4. Acceptance: no tenant/owner enumeration, bounded pagination, no plaintext
   credentials in URL/storage, and no automatic approvals. Preserve unsaved
   changes when switching an exam. Continue real synthetic API/browser testing.
@@ -326,3 +333,21 @@ records or private traces.
   manual UUID entry and clears summaries/credentials on disconnect (DPR 1/2).
 - [ ] Production listing index/Blob adapter, chronological ordering, concurrent
   snapshot pagination and school exam-search UX.
+
+## Browser input setup/review cases
+
+- [x] Create an exam without typing a UUID; new layout confirmations start false.
+- [x] Explicit settings save followed by real raw PDF/XLSX uploads and optional
+  CSV attendance, through authenticated ETag endpoints.
+- [x] Full roster/status table preserves IDs `001`/`002`; absence is not zero.
+- [x] Full rubric question text/criteria/marks are shown from the pinned engine.
+- [x] Input approval starts unchecked; CSV requires independent attendance
+  confirmation. Verify persisted state and one/two attestations, then render.
+- [x] Explicitly reopening approved input setup clears current input/region
+  approvals and preserves prior history; unsaved boxes are discarded only after
+  confirmation.
+- [x] Four input workflow cases (CSV/no CSV, DPR 1/2) plus existing browser
+  regression: 20 total passed.
+- [ ] Legacy missing-preview and input-conflict reload browser fixtures.
+- [ ] Production direct-Blob uploads, progress/retry UX, editable rubric/roster
+  grid, school validation and real Entra sign-in.

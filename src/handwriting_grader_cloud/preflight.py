@@ -155,4 +155,5 @@ class EngineInputValidator:
                 for identifier, student in roster.items()
             ],
             "question_labels": [question["question_number"] for question in questions],
+            "rubric_review": questions,
         }

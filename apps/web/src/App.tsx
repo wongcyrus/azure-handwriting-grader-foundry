@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent, KeyboardEvent, PointerEvent } from "react";
 import { ApiError, request } from "./api";
+import { InputSetup } from "./InputSetup";
 import { drawnBox, imagePoint, movedBox, validBox } from "./geometry";
 import type { Point } from "./geometry";
 import type { Box, Draft, Exam, ExamList } from "./types";
@@ -17,6 +18,8 @@ const copyDraft = (exam: Exam): Draft | null =>
 export function App() {
   const [tokenInput, setTokenInput] = useState("");
   const [examInput, setExamInput] = useState("");
+  const [newTitle, setNewTitle] = useState("");
+  const [inputDirty, setInputDirty] = useState(false);
   const [owned, setOwned] = useState<ExamList["exams"]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [listed, setListed] = useState(false);
@@ -52,6 +55,7 @@ export function App() {
     );
     setDraft(copyDraft(next.value));
     setDirty(false);
+    setInputDirty(false);
     setConfirmed(false);
     setSelected(null);
     setConflict(null);
@@ -92,18 +96,21 @@ export function App() {
   }, [page?.artifact_id, exam?.id, token]);
 
   useEffect(() => {
-    if (!dirty) return;
+    if (!dirty && !inputDirty) return;
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
+  }, [dirty, inputDirty]);
 
   async function connect(event: FormEvent) {
     event.preventDefault();
-    if (dirty && !window.confirm("Discard unsaved edits and load this exam?"))
+    if (
+      (dirty || inputDirty) &&
+      !window.confirm("Discard unsaved edits and load this exam?")
+    )
       return;
     if (tokenInput.includes(".")) {
       setError("Use a synthetic development token, not a real identity token.");
@@ -149,6 +156,38 @@ export function App() {
       setError(
         reason instanceof Error ? reason.message : "Could not list exams.",
       );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createExam() {
+    if (tokenInput.includes(".")) {
+      setError("Use a synthetic development token.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const next = await request<Exam>("/api/exams", tokenInput, {
+        method: "POST",
+        body: {
+          title: newTitle,
+          settings: {
+            pages_per_student: 2,
+            scan_order_confirmed: false,
+            same_layout_for_all: false,
+            roster_sheet: "Roster",
+          },
+        },
+      });
+      setToken(tokenInput);
+      setTokenInput("");
+      setExamInput(next.value.id);
+      setNewTitle("");
+      adopt(next);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Creation failed.");
     } finally {
       setBusy(false);
     }
@@ -344,13 +383,29 @@ export function App() {
             </button>
           )}
           <button disabled={busy}>Load exam</button>
+          <label>
+            New exam title
+            <input
+              maxLength={160}
+              value={newTitle}
+              onChange={(event) => setNewTitle(event.target.value)}
+              disabled={busy}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={busy || tokenInput.length < 32 || !newTitle.trim()}
+            onClick={() => void createExam()}
+          >
+            Create new exam
+          </button>
         </form>
       ) : (
         <>
           <section className="card">
             <h2>{exam.title}</h2>
             <p role="status">
-              {dirty
+              {dirty || inputDirty
                 ? "Unsaved edits - not approved"
                 : exam.current_region_approval
                   ? "Saved region layout approved"
@@ -365,7 +420,7 @@ export function App() {
               disabled={busy}
               onClick={() => {
                 if (
-                  dirty &&
+                  (dirty || inputDirty) &&
                   !window.confirm("Discard unsaved edits and disconnect?")
                 )
                   return;
@@ -377,6 +432,7 @@ export function App() {
                 setSnapshot(null);
                 setDraft(null);
                 setDirty(false);
+                setInputDirty(false);
                 setConfirmed(false);
                 setConflict(null);
                 setImage(null);
@@ -386,7 +442,9 @@ export function App() {
             </button>
             {!regions && (
               <button
-                disabled={busy || exam.state !== "INPUTS_REVIEWED"}
+                disabled={
+                  busy || inputDirty || exam.state !== "INPUTS_REVIEWED"
+                }
                 onClick={() => void action("prepare")}
               >
                 Prepare template
@@ -396,6 +454,56 @@ export function App() {
               <p>Complete input review before preparing the template.</p>
             )}
           </section>
+          {!regions && snapshot && (
+            <InputSetup
+              key={`${exam.id}:${exam.version}`}
+              exam={exam}
+              etag={snapshot.etag}
+              token={token}
+              busy={busy}
+              onBusy={setBusy}
+              onAdopt={adopt}
+              onError={setError}
+              onDirty={setInputDirty}
+            />
+          )}
+          {regions && (
+            <button
+              disabled={busy}
+              onClick={async () => {
+                if (
+                  !window.confirm(
+                    "Discard unsaved boxes and invalidate current approvals to change inputs?",
+                  )
+                )
+                  return;
+                setBusy(true);
+                try {
+                  adopt(
+                    await request<Exam>(
+                      `/api/exams/${exam.id}/settings`,
+                      token,
+                      {
+                        method: "PUT",
+                        body: exam.settings,
+                        etag: snapshot!.etag,
+                      },
+                    ),
+                  );
+                } catch (reason) {
+                  setError(
+                    reason instanceof Error
+                      ? reason.message
+                      : "Could not reopen inputs.",
+                  );
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Change inputs (invalidate approvals)
+            </button>
+          )}
           {regions && draft && page && (
             <section className="editor">
               <div className="card">

@@ -10,8 +10,8 @@ The reusable grading engine is a pinned optional dependency, not copied into thi
 
 **Publication status:** Public `main` currently contains the initial documentation
 only. Foundation `e8ad9cf`, attendance `708cff1` and region review `9d05ab0` are local,
-not pushed. Teacher canvas `9f8e2f0` is also committed locally; owned-exam selection
-is included in the latest authorized increment. Setup commands
+not pushed. Canvas `9f8e2f0` and owned selection `184875d` are also local commits.
+Input setup/review is included in the latest authorized increment. Setup commands
 below apply to this worktree or after implementation files are published.
 
 ## Implementation status
@@ -32,9 +32,11 @@ The current increment implements durable **local input/region review and offline
 - React/TypeScript local canvas: pointer/keyboard editing, zoom, explicit page review,
   snapshot approval and conflict recovery without losing unsaved boxes.
 - Tenant/owner-scoped exam summaries with bounded cursor pagination and browser selection.
+- Browser exam creation, PDF/XLSX/CSV uploads, explicit layout settings and full
+  roster/rubric/attendance preview before independent human approvals.
 
 **Not implemented:** production Blob/Queue adapters, all-script orientation/sequence review,
-production sign-in, exam setup/attendance/score screens, pricing and budget gates, grading jobs,
+production sign-in, direct roster/rubric/score editors, pricing and budget gates, grading jobs,
 Foundry skill hosting, Terraform deployment or reports. Input-review attestation
 does **not** authorize grading. This increment contains no inference client or grading
 endpoint and cannot make paid model calls.
@@ -181,6 +183,13 @@ The seed creates synthetic input
 attestations for a demo, not evidence that a real teacher examined real scans.
 Never use real student data or real identity tokens. Tokens remain in browser
 memory only; refreshing signs out. Production Entra login is not implemented.
+
+Alternatively enter a new title and choose **Create new exam**. Explicitly save
+scan-order/common-layout confirmations, upload PDF scans, XLSX roster/rubric and
+optional complete attendance CSV, then validate. Inspect every roster/status row
+and the full rubric criteria before confirming the input snapshot. Attendance
+CSV requires an independent confirmation. These actions never start grading.
+Changing inputs explicitly invalidates current approvals while retaining history.
 
 Prepare the template, draw boxes or add/edit them with the keyboard, review each
 page, save, then explicitly confirm and approve. Editing clears that page's review.

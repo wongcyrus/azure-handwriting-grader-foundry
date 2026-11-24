@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import urllib.request
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from smoke_review import synthetic_files
@@ -12,7 +13,23 @@ from smoke_review import synthetic_files
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
+    parser.add_argument(
+        "--export-dir", type=Path, help="Export fake files offline to a new directory"
+    )
+    parser.add_argument(
+        "--attendance", action="store_true", help="One synthetic present/absent pair"
+    )
     args = parser.parse_args()
+    if args.export_dir is not None:
+        args.export_dir.mkdir(parents=True, exist_ok=False)
+        paths = {}
+        for kind, content in synthetic_files(args.attendance).items():
+            suffix = ".pdf" if kind == "scans" else ".csv" if kind == "attendance" else ".xlsx"
+            path = args.export_dir / (kind + suffix)
+            path.write_bytes(content)
+            paths[kind] = str(path.resolve())
+        print(json.dumps(paths))
+        return
     address = urlsplit(args.base_url)
     if (
         address.scheme != "http"
@@ -56,7 +73,7 @@ def main():
         },
     )
     exam_id = exam["id"]
-    for kind, content in synthetic_files().items():
+    for kind, content in synthetic_files(args.attendance).items():
         exam, etag = call(
             f"/api/exams/{exam_id}/artifacts/{kind}", "POST", content, etag, binary=True
         )
@@ -64,7 +81,11 @@ def main():
     exam, _ = call(
         f"/api/exams/{exam_id}/approvals",
         "POST",
-        {"snapshot_sha256": exam["snapshot_sha256"], "confirmed": True},
+        {
+            "snapshot_sha256": exam["snapshot_sha256"],
+            "confirmed": True,
+            "attendance_confirmed": args.attendance,
+        },
         etag,
     )
     print(json.dumps({"exam_id": exam_id, "state": exam["state"]}))

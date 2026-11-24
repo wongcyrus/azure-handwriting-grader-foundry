@@ -57,3 +57,31 @@ export async function addBox(page: Page, label: string) {
   await page.getByLabel("New box label").selectOption(label);
   await page.getByRole("button", { name: "Add box with keyboard" }).click();
 }
+
+export function exportInputs(
+  directory: string,
+  attendance: boolean,
+): Record<string, string> {
+  return JSON.parse(
+    execFileSync(
+      "uv",
+      [
+        "run",
+        "--frozen",
+        "--extra",
+        "dev",
+        "--extra",
+        "engine",
+        "python",
+        "tools/seed_canvas.py",
+        "--export-dir",
+        directory,
+        ...(attendance ? ["--attendance"] : []),
+      ],
+      {
+        cwd: resolve(import.meta.dirname, "../../.."),
+        encoding: "utf-8",
+      },
+    ),
+  );
+}

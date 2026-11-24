@@ -3,6 +3,21 @@
   color: #182c40;
   background: #edf2f6;
 }
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th,
+td {
+  border: 1px solid #b9c7d4;
+  padding: 0.5rem;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+small {
+  display: block;
+  overflow-wrap: anywhere;
+}
 body {
   margin: 0;
 }

@@ -7,6 +7,7 @@ import {
   openExam,
   seedExam,
   FAKE_TOKEN,
+  exportInputs,
 } from "./support";
 
 for (const zoom of [0.25, 0.5, 2]) {
@@ -120,6 +121,21 @@ test("keyboard edits reset page review and explicit approval is required", async
   await expect(
     page.getByLabel("I approve this saved layout for scripts sharing it"),
   ).not.toBeChecked();
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page
+    .getByRole("button", {
+      name: "Change inputs (invalidate approvals)",
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole("application", { name: "Page region canvas" }),
+  ).toHaveCount(0);
+  const reopened = await currentExam(request, id);
+  expect(reopened.document.state).toBe("SETUP");
+  expect(reopened.document.current_approval).toBeNull();
+  expect(reopened.document.current_region_approval).toBeNull();
+  expect(reopened.document.approvals).toHaveLength(2);
 });
 
 test("stale save preserves boxes and reapplication clears all reviews", async ({
@@ -237,3 +253,93 @@ test("owned selection loads an exam without typing its UUID and clears on discon
   await expect(selector).toHaveCount(0);
   await expect(page.getByLabel("Synthetic development token")).toHaveValue("");
 });
+
+for (const attendance of [false, true]) {
+  test(`create, upload and explicitly review inputs with attendance ${attendance}`, async ({
+    page,
+    request,
+  }, testInfo) => {
+    const files = exportInputs(
+      testInfo.outputPath("synthetic-inputs"),
+      attendance,
+    );
+    await page.goto("/");
+    await page.getByLabel("Synthetic development token").fill(FAKE_TOKEN);
+    await page
+      .getByLabel("New exam title", { exact: true })
+      .fill("Synthetic browser input workflow");
+    const creation = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/api/exams",
+    );
+    await page
+      .getByRole("button", { name: "Create new exam", exact: true })
+      .click();
+    const id = (await (await creation).json()).id as string;
+    await expect(
+      page.getByRole("heading", { name: "Input setup and review" }),
+    ).toBeVisible();
+    await page.getByLabel("I confirmed scan order").check();
+    await page.getByLabel("All scripts use the same layout").check();
+    await page
+      .getByRole("button", { name: "Save input settings", exact: true })
+      .click();
+    for (const [kind, path] of Object.entries(files)) {
+      await expect(
+        page.getByLabel(`Upload ${kind}`, { exact: false }),
+      ).toBeEnabled();
+      await page
+        .getByLabel(`Upload ${kind}`, { exact: false })
+        .setInputFiles(path);
+      await expect(
+        page.getByText(`${kind} uploaded:`, { exact: false }),
+      ).toBeVisible();
+    }
+    await page
+      .getByRole("button", {
+        name: "Validate inputs for review",
+        exact: true,
+      })
+      .click();
+    await expect(
+      page.getByRole("row").filter({ hasText: "001" }),
+    ).toContainText("present");
+    await expect(
+      page.getByRole("row").filter({ hasText: "002" }),
+    ).toContainText(attendance ? "absent" : "present");
+    await expect(
+      page.getByRole("cell", { name: "Synthetic criterion", exact: true }),
+    ).toBeVisible();
+    const approve = page.getByRole("button", {
+      name: "Approve input snapshot",
+      exact: true,
+    });
+    await expect(approve).toBeDisabled();
+    await page
+      .getByLabel("I reviewed the roster, rubric and scan settings")
+      .check();
+    if (attendance) {
+      await expect(approve).toBeDisabled();
+      await page
+        .getByLabel("I separately confirm the present/absent attendance list")
+        .check();
+    }
+    await approve.click();
+    const prepare = page.getByRole("button", {
+      name: "Prepare template",
+      exact: true,
+    });
+    await expect(prepare).toBeEnabled();
+    const persisted = await currentExam(request, id);
+    expect(persisted.document.state).toBe("INPUTS_REVIEWED");
+    expect(persisted.document.approvals).toHaveLength(attendance ? 2 : 1);
+    expect(persisted.document.preflight.rubric_review[0].marking_scheme).toBe(
+      "Synthetic criterion",
+    );
+    await prepare.click();
+    await expect(
+      page.getByLabel("I reviewed page 1 and its boxes"),
+    ).toBeEnabled();
+  });
+}
