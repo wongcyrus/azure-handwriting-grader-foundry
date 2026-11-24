@@ -9,8 +9,8 @@ The reusable grading engine is a pinned optional dependency, not copied into thi
 [continuation instructions](AGENTS.md).
 
 **Publication status:** Public `main` currently contains the initial documentation
-only. Foundation `e8ad9cf` and attendance `708cff1` are committed locally, not pushed.
-The region-review increment is local and uncommitted pending review. Setup commands
+only. Foundation `e8ad9cf`, attendance `708cff1` and region review `9d05ab0` are local,
+not pushed. The verified teacher canvas is local in this increment. Setup commands
 below apply to this worktree or after implementation files are published.
 
 ## Implementation status
@@ -28,9 +28,11 @@ The current increment implements durable **local input/region review and offline
 - Optional explicit attendance CSV, full roster/status preview and separate teacher attestation.
 - Pinned-engine first-script JPEG previews and validated manual region drafts.
 - Separate region attestation with preserved approved geometry, hashes and page-review coverage.
+- React/TypeScript local canvas: pointer/keyboard editing, zoom, explicit page review,
+  snapshot approval and conflict recovery without losing unsaved boxes.
 
 **Not implemented:** production Blob/Queue adapters, all-script orientation/sequence review,
-browser attendance/region/score editors, pricing and budget gates, grading jobs,
+production sign-in, exam setup/attendance/score screens, pricing and budget gates, grading jobs,
 Foundry skill hosting, Terraform deployment or reports. Input-review attestation
 does **not** authorize grading. This increment contains no inference client or grading
 endpoint and cannot make paid model calls.
@@ -155,3 +157,42 @@ Never replace this pin with floating `main`. Cloud dependencies stay in this app
 not in the reusable grader's default installation.
 
 No Azure resources, paid inference or production configuration are created by local setup.
+
+## Local teacher canvas
+
+With the synthetic API running, create an explicitly fake exam:
+
+```sh
+uv run --frozen --extra dev --extra engine python tools/seed_canvas.py
+cd apps/web
+npm ci
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`. Use the emitted exam ID and the matching synthetic
+development token in the password field. The seed creates synthetic input
+attestations for a demo, not evidence that a real teacher examined real scans.
+Never use real student data or real identity tokens. Tokens remain in browser
+memory only; refreshing signs out. Production Entra login is not implemented.
+
+Prepare the template, draw boxes or add/edit them with the keyboard, review each
+page, save, then explicitly confirm and approve. Editing clears that page's review.
+Zoom/DPR are converted using actual CSS bounds into canonical image pixels.
+A stale save preserves local edits; choose server reload or explicitly reapply
+boxes to the latest compatible snapshot and review again. Changed input hashes
+prohibit reapplying old coordinates.
+
+From `apps/web`:
+
+```sh
+npm run build
+npm run check
+npm test
+npm run test:browser
+```
+
+Browser tests require Google Chrome on this host. They start isolated localhost
+API/Vite services on ports 18765/18766, use synthetic data, test DPR 1/2 and stop
+the services afterward. Evidence and the synthetic test database are retained
+under ignored `.local/test-results/`. Other browsers/production hosting remain
+unverified.

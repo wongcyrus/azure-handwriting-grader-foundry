@@ -6,6 +6,8 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 .env
+node_modules/
+apps/web/dist/
 *.tfstate*
 .terraform/
 *.tfplan

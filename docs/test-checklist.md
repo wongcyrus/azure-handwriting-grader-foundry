@@ -10,7 +10,8 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 - Published baseline: `a662755538d079f896a7ee5a6306a3c84f4c6a12`, docs-only.
 - Verified foundation committed locally as `e8ad9cf` after explicit user approval;
   attendance committed as `708cff1` after explicit approval. Neither is pushed.
-  The new rendered-page/region-review increment is uncommitted.
+  Region review committed as `9d05ab0`, also unpushed. The user has authorized
+  committing the verified canvas increment; no publication is authorized.
 - A fresh GitHub clone does not yet contain the application. Another agent must
   use this worktree until publication is explicitly approved.
 - Engine pin: `3b155f9232cb0730587d89677c932ea049dd7f71`.
@@ -27,10 +28,11 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | Human inputs | Explicit scan order/common layout, snapshot-bound teacher attestation |
 | Engine bridge | Offline XLSX/PDF/roster/rubric preflight; provenance/integrity and revalidation |
 | Attendance | Optional complete CSV; present/absent preview and distinct teacher attestation; web UI pending |
-| Region review | First-present-script JPEG template, actual pixel dimensions, validated drafts and separate geometry attestation; canvas pending |
+| Region review | First-present-script JPEG template, actual pixel dimensions, validated drafts and separate geometry attestation |
+| Local teacher canvas | React/TypeScript pointer/keyboard editing, CSS/zoom/DPR conversion, page review, approval and explicit conflict recovery |
 | Production Blob/Queue, budgets/jobs | Not implemented |
 | Skills/Foundry protocol/hosting | Not implemented |
-| Teacher browser UI/score review | Not implemented |
+| Teacher setup/attendance/score UI and production login | Not implemented; region canvas is synthetic localhost only |
 | Terraform/CI/cloud deployment | Not implemented |
 | Grading/reports/delivery | Not implemented; no paid or grading endpoint |
 
@@ -53,6 +55,20 @@ uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attend
 uv run --frozen --extra dev --extra engine python tools/smoke_review.py --regions
 uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance --regions
 ```
+
+Frontend commands from `apps/web` (own reviewed manifest/lockfile):
+
+```sh
+npm ci
+npm run build
+npm run check
+npm test
+npm run test:browser
+```
+
+Browser tests require the host's Google Chrome. Ports 18765/18766 must be free;
+the runner never reuses an unrelated server. Seed data and approvals are explicitly
+synthetic, not evidence of real human review or deployment.
 
 Focused selectors:
 
@@ -91,14 +107,21 @@ Foundation/preflight: 73 tests (53 core + 20 real-engine) verified at
 Attendance: 101 tests (53 core + 48 real-engine) verified at
 2026-11-24T15:20:24Z, then committed as `708cff1`.
 
-Rendered-page/region-review increment verified at **2026-11-24T15:30:54Z**:
+Region review: 144 tests and four HTTP smoke modes verified at
+2026-11-24T15:30:54Z, then committed as `9d05ab0`.
+
+Teacher canvas verified at **2026-11-24T15:44:36Z**:
 
 | Check actually run | Result |
 |---|---|
 | `pytest tests/test_region_review.py tests/test_repository.py` | 44 passed |
 | Full application pytest suite with `dev` + `engine` extras and JUnit | 144 passed, no skips/failures/errors; 54 core and 90 real-engine cases |
+| `npm run build` | Strict TypeScript and production asset build passed |
+| `npm run check` | TypeScript and Prettier passed |
+| `npm test` | 6 geometry cases passed |
+| `npm run test:browser` | 14 real Chrome/API cases passed; DPR 1 and 2 |
 | `ruff check .` | Passed |
-| `ruff format --check .` | Passed; 23 Python files |
+| `ruff format --check .` | Passed; 24 Python files |
 | `python tools/smoke_review.py` | Passed; live HTTP with real synthetic PDF/XLSX and clean shutdown |
 | `python tools/smoke_review.py --attendance` | Passed; explicit present/absent preview, present-only PDF count and two teacher attestations |
 | `python tools/smoke_review.py --regions` | Passed; native JPEGs, canonical draft, separate region attestation |
@@ -109,8 +132,12 @@ Rendered-page/region-review increment verified at **2026-11-24T15:30:54Z**:
 Raw JUnit report: ignored `.local/test-results/pytest.xml`. No inference, Azure
 deployment or live Entra authentication was tested.
 
-Region review remains uncommitted pending review. All smoke commands clean up
-their own localhost server and temporary files. No Azure resources were deployed.
+The initial browser run found an exact-label test locator mismatch for Zoom;
+using its accessible combobox role fixed the locator. All pointer cases then
+passed, followed by the full 14-case run. No failed case is reported as passed.
+Browser services stopped: ports 18765/18766 were verified closed afterward.
+All smoke commands clean up their own localhost server and temporary files.
+No Azure resources were deployed.
 
 ## Local foundation regression cases
 
@@ -196,12 +223,11 @@ their own localhost server and temporary files. No Azure resources were deployed
 
 1. Run the required commands above and inspect `git status --short`.
 2. Do not treat locally committed or untracked implementation as already published.
-3. Next bounded task: teacher region-canvas frontend against the implemented API.
-  Keep local synthetic authentication separate from pending production Entra setup.
-4. Acceptance: map CSS/zoom/DPR coordinates to 200-DPI top-left image pixels,
-  support keyboard editing, require explicit page review, preserve unsaved edits
-  on ETag conflict and clear stale approval UI. Never submit approval automatically
-  on page load. Use real synthetic API flows rather than fabricated screenshots.
+3. Next bounded task: owned exam listing/selection, then the input upload/review
+  screens. Keep local synthetic authentication separate from pending Entra setup.
+4. Acceptance: no tenant/owner enumeration, bounded pagination, no plaintext
+  credentials in URL/storage, and no automatic approvals. Preserve unsaved
+  changes when switching an exam. Continue real synthetic API/browser testing.
 5. Keep the engine's orientation/sequence checks before later grading; page count
   alone cannot establish correct scans or student identity.
 6. Add focused positive/negative integration tests and a reproducible smoke path.
@@ -262,3 +288,22 @@ adapter at 200 DPI. Caps are 4 million pixels/page, 24 million/template and 10 M
 per JPEG. No engine approval files are materialized and no model endpoint is called.
 Process isolation, render timeouts, all-script scan checks and production storage
 remain unverified future work.
+
+## Local teacher canvas cases
+
+- [x] `apps/web/src/geometry.test.ts`: zoom-aware mapping, clipped reverse drags,
+  zero-width suppression and bounded keyboard movement (6 cases).
+- [x] `apps/web/tests/canvas.spec.ts`: real API/native JPEG pointer geometry at
+  25%, 50% and 200% zoom, each under DPR 1 and 2.
+- [x] Keyboard movement invalidates page review; complete layouts require explicit
+  save/confirmation and never auto-approve on page load.
+- [x] Stale save preserves local boxes; reapply uses the latest ETag and clears
+  review flags. Changed input hashes disable old-coordinate reapplication.
+- [x] Token remains memory-only; reload returns to sign-in with empty credentials.
+- [x] Strict TS build, Prettier, 14 browser cases and test-service cleanup.
+- [ ] Other browsers, touchscreen/rotation gestures, screen-reader evaluation,
+  school acceptance, live Entra and deployed SWA/API integration.
+
+Ignored evidence: `.local/test-results/pytest.xml`, `browser.xml`, browser artifacts
+and `canvas.sqlite3` (synthetic only). Never publish credentials, real student
+records or private traces.
