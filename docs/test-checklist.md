@@ -13,7 +13,9 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
   Region review `9d05ab0` and canvas `9f8e2f0` are also unpushed.
   Owned-exam selection is committed as `184875d`, also unpushed. The user has
   authorized committing verified input setup/review, now `bff8e5b` (unpushed).
-  The new offline CI workflow is uncommitted pending review; publication is not authorized.
+  Offline CI is committed as `7eb4ed8` after explicit approval, also unpushed.
+  Browser input-edge regression tests and this handoff are uncommitted pending
+  review; publication is not authorized.
 - A fresh GitHub clone does not yet contain the application. Another agent must
   use this worktree until publication is explicitly approved.
 - Engine pin: `3b155f9232cb0730587d89677c932ea049dd7f71`.
@@ -164,6 +166,37 @@ Input test discovery initially exposed incorrectly nested new test declarations;
 they were moved to file scope, then all four targeted input cases and the full
 20-case browser suite passed.
 
+### Browser input-edge verification
+
+Verified at **2026-11-24T16:13:40+00:00**. No production implementation changed.
+
+| Check actually run | Result |
+|---|---|
+| `npm run build` | Strict TypeScript and production asset build passed |
+| `npm run check` | TypeScript and Prettier passed |
+| `npm test` | 6 geometry cases passed |
+| `npm run test:browser` | All 26 real Chrome/API cases passed, including six new cases across DPR 1/2 |
+| Browser JUnit and shutdown check | 26 cases, no failures/errors/skips; ports 18765/18766 closed |
+
+The initial focused command
+`npm run test:browser -- --grep 'legacy preview|stale input settings'`
+passed four legacy cases but failed two conflict cases because an exact-label
+locator did not find the Pages per student select. The accessible combobox-role
+locator fixed the test; the full suite subsequently passed all six new cases.
+No runtime bug or approval bypass was found by these cases.
+
+Legacy fixtures omit either `attendance_review` or `rubric_review` from a
+test-only browser GET response. They do not forge server approval records or
+replace the engine. Revalidation uses the real authenticated API and pinned
+engine, restores both previews and resets confirmation. Persisted approval
+history remains unchanged and no browser approval request is sent.
+
+Conflict coverage verifies a real stale-ETag 409, preservation of local edits,
+no overwrite of the winning server snapshot, cancellation without a reload,
+and explicit discard/reload adopting current settings and clearing the error.
+Python sources are unchanged; the earlier 155-case pytest result above is
+retained, not presented as a new Python run for this browser-only increment.
+
 ## Local foundation regression cases
 
 - [x] `tests/test_auth.py::test_valid_delegated_token`: signed delegated token accepted.
@@ -248,8 +281,10 @@ they were moved to file scope, then all four targeted input cases and the full
 
 1. Run the required commands above and inspect `git status --short`.
 2. Do not treat locally committed or untracked implementation as already published.
-3. Next bounded task: close legacy-preview/input-conflict browser edge cases,
-  then implement the immutable artifact/job bridge under the M3 plan. Do not
+3. Next bounded task: implement an offline immutable approved-artifact
+  hydration/checkpoint round trip as the first M3 bridge slice. Reject missing
+  or stale approvals, modified artifacts and incompatible snapshot/geometry
+  provenance; test worker replacement with synthetic data. Do not
   call grading or materialize unreviewed engine approvals to speed integration.
 4. Acceptance: no tenant/owner enumeration, bounded pagination, no plaintext
   credentials in URL/storage, and no automatic approvals. Preserve unsaved
@@ -361,7 +396,14 @@ records or private traces.
   confirmation.
 - [x] Four input workflow cases (CSV/no CSV, DPR 1/2) plus existing browser
   regression: 20 total passed.
-- [ ] Legacy missing-preview and input-conflict reload browser fixtures.
+- [x] `legacy preview missing attendance_review blocks approval until revalidation`
+  and `legacy preview missing rubric_review blocks approval until revalidation`:
+  missing either preview blocks approval even after confirmation; real
+  revalidation restores the previews and requires a new confirmation.
+- [x] `stale input settings preserve edits until explicit discard and reload`:
+  conflict preserves local fields, cancel retains edits without a read, and
+  confirmed reload adopts the winning settings without overwriting server state.
+- [x] Six new cases across DPR 1/2; all 26 browser cases passed.
 - [ ] Production direct-Blob uploads, progress/retry UX, editable rubric/roster
   grid, school validation and real Entra sign-in.
 
@@ -374,8 +416,8 @@ records or private traces.
   credentials/deployment steps and no `pull_request_target` execution.
 - [x] Lockfile restore commands, Python/style checks, HTTP smoke, TS/build/style,
   geometry tests and actual synthetic Chrome workflow are represented.
-- [x] Local equivalents: 155 Python, 6 geometry and 20 browser cases passed;
-  hosted results are not claimed.
+- [x] Local equivalents: prior 155 Python, current 6 geometry and 26 browser
+  cases passed; hosted results are not claimed.
 - [x] Evidence upload is restricted to synthetic JUnit XML; no raw database,
   browser trace, student record or credential artifact is uploaded.
 - [ ] GitHub-hosted workflow execution, branch protection and release/deployment

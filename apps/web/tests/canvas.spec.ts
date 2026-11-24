@@ -4,6 +4,7 @@ import {
   addBox,
   authHeaders,
   currentExam,
+  loadExam,
   openExam,
   seedExam,
   FAKE_TOKEN,
@@ -343,3 +344,163 @@ for (const attendance of [false, true]) {
     ).toBeEnabled();
   });
 }
+
+for (const missing of ["attendance_review", "rubric_review"]) {
+  test(`legacy preview missing ${missing} blocks approval until revalidation`, async ({
+    page,
+    request,
+  }) => {
+    const id = seedExam();
+    const { document, etag } = await currentExam(request, id);
+    const reopened = await request.put(`${API_BASE}/api/exams/${id}/settings`, {
+      headers: { ...authHeaders, "If-Match": etag },
+      data: document.settings,
+    });
+    expect(reopened.ok()).toBeTruthy();
+    const reviewed = await request.post(`${API_BASE}/api/exams/${id}/review`, {
+      headers: { ...authHeaders, "If-Match": reopened.headers()["etag"] },
+    });
+    expect(reviewed.ok()).toBeTruthy();
+    let approvalRequests = 0;
+    page.on("request", (event) => {
+      if (event.method() === "POST" && event.url().endsWith("/approvals"))
+        approvalRequests++;
+    });
+    const path = `**/api/exams/${id}`;
+    await page.route(path, async (route) => {
+      const response = await route.fetch();
+      const legacy = await response.json();
+      delete legacy.preflight[missing];
+      await route.fulfill({ response, json: legacy });
+    });
+    await loadExam(page, id);
+    await expect(
+      page.getByText("Legacy review has no criteria preview.", {
+        exact: false,
+      }),
+    ).toBeVisible();
+    const confirmation = page.getByLabel(
+      "I reviewed the roster, rubric and scan settings",
+    );
+    const approve = page.getByRole("button", {
+      name: "Approve input snapshot",
+      exact: true,
+    });
+    await confirmation.check();
+    await expect(approve).toBeDisabled();
+    expect(approvalRequests).toBe(0);
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page
+      .getByRole("button", {
+        name: "Change inputs (invalidate approvals)",
+        exact: true,
+      })
+      .click();
+    await expect(
+      page.getByRole("button", {
+        name: "Validate inputs for review",
+        exact: true,
+      }),
+    ).toBeEnabled();
+    await page.unroute(path);
+    await page
+      .getByRole("button", {
+        name: "Validate inputs for review",
+        exact: true,
+      })
+      .click();
+    await expect(
+      page.getByRole("row").filter({ hasText: "001" }),
+    ).toContainText("present");
+    await expect(
+      page.getByRole("cell", { name: "Synthetic criterion", exact: true }),
+    ).toBeVisible();
+    await expect(confirmation).not.toBeChecked();
+    await expect(approve).toBeDisabled();
+    await confirmation.check();
+    await expect(approve).toBeEnabled();
+    expect(approvalRequests).toBe(0);
+    const persisted = await currentExam(request, id);
+    expect(persisted.document.state).toBe("WAITING_FOR_INPUT_REVIEW");
+    expect(persisted.document.current_approval).toBeNull();
+    expect(persisted.document.approvals).toHaveLength(1);
+    expect(persisted.document.preflight.attendance_review).toHaveLength(2);
+    expect(persisted.document.preflight.rubric_review).toHaveLength(1);
+  });
+}
+
+test("stale input settings preserve edits until explicit discard and reload", async ({
+  page,
+  request,
+}) => {
+  const id = seedExam();
+  const { document, etag } = await currentExam(request, id);
+  const reopened = await request.put(`${API_BASE}/api/exams/${id}/settings`, {
+    headers: { ...authHeaders, "If-Match": etag },
+    data: document.settings,
+  });
+  expect(reopened.ok()).toBeTruthy();
+  await loadExam(page, id);
+  let reloadReads = 0;
+  page.on("request", (event) => {
+    if (event.method() === "GET" && event.url().endsWith(`/api/exams/${id}`))
+      reloadReads++;
+  });
+  await page.getByLabel("Roster sheet", { exact: true }).fill("Unsaved roster");
+  await page.getByLabel("I confirmed scan order").uncheck();
+  const winner = await request.put(`${API_BASE}/api/exams/${id}/settings`, {
+    headers: { ...authHeaders, "If-Match": reopened.headers()["etag"] },
+    data: {
+      ...document.settings,
+      pages_per_student: 1,
+      roster_sheet: "Concurrent roster",
+    },
+  });
+  expect(winner.ok()).toBeTruthy();
+  const winningDocument = await winner.json();
+  const rejected = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      response.url().endsWith(`/api/exams/${id}/settings`),
+  );
+  await page
+    .getByRole("button", { name: "Save input settings", exact: true })
+    .click();
+  expect((await rejected).status()).toBe(409);
+  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByLabel("Roster sheet", { exact: true })).toHaveValue(
+    "Unsaved roster",
+  );
+  await expect(page.getByLabel("I confirmed scan order")).not.toBeChecked();
+  await expect(
+    page.getByLabel("Upload scans", { exact: false }),
+  ).toBeDisabled();
+  expect((await currentExam(request, id)).document).toEqual(winningDocument);
+  const reload = page.getByRole("button", {
+    name: "Reload inputs (discard unsaved settings)",
+    exact: true,
+  });
+  page.once("dialog", (dialog) => void dialog.dismiss());
+  await reload.click();
+  await expect(page.getByLabel("Roster sheet", { exact: true })).toHaveValue(
+    "Unsaved roster",
+  );
+  expect(reloadReads).toBe(0);
+  page.once("dialog", (dialog) => void dialog.accept());
+  await reload.click();
+  await expect(page.getByLabel("Roster sheet", { exact: true })).toHaveValue(
+    "Concurrent roster",
+  );
+  await expect(
+    page.getByRole("combobox", { name: "Pages per student", exact: true }),
+  ).toHaveValue("1");
+  await expect(page.getByLabel("I confirmed scan order")).toBeChecked();
+  await expect(
+    page.getByRole("button", { name: "Save input settings", exact: true }),
+  ).toBeDisabled();
+  await expect(page.getByLabel("Upload scans", { exact: false })).toBeEnabled();
+  await expect(reload).toHaveCount(0);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  expect(reloadReads).toBe(1);
+  expect((await currentExam(request, id)).document).toEqual(winningDocument);
+});

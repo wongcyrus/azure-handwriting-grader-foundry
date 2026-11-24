@@ -11,7 +11,7 @@ The reusable grading engine is a pinned optional dependency, not copied into thi
 **Publication status:** Public `main` currently contains the initial documentation
 only. Foundation `e8ad9cf`, attendance `708cff1` and region review `9d05ab0` are local,
 not pushed. Canvas `9f8e2f0` and owned selection `184875d` are also local commits.
-Input setup/review is committed as `bff8e5b`, also local only. Setup commands
+Input setup/review `bff8e5b` and offline CI `7eb4ed8` are also local only. Setup commands
 below apply to this worktree or after implementation files are published.
 
 ## Implementation status

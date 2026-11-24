@@ -32,12 +32,19 @@ export function seedExam(): string {
   return exam_id;
 }
 
-export async function openExam(page: Page): Promise<string> {
-  const exam_id = seedExam();
+export async function loadExam(page: Page, exam_id: string): Promise<void> {
   await page.goto("/");
   await page.getByLabel("Exam ID", { exact: true }).fill(exam_id);
   await page.getByLabel("Synthetic development token").fill(FAKE_TOKEN);
   await page.getByRole("button", { name: "Load exam" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Input setup and review" }),
+  ).toBeVisible();
+}
+
+export async function openExam(page: Page): Promise<string> {
+  const exam_id = seedExam();
+  await loadExam(page, exam_id);
   await page.getByRole("button", { name: "Prepare template" }).click();
   await expect(
     page.getByLabel("I reviewed page 1 and its boxes"),

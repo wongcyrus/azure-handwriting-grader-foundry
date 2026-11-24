@@ -17,6 +17,7 @@ the previous agent's chat or session todo database is not required.
   Teacher canvas is committed as `9f8e2f0`, also local only.
   Owned-exam selection is committed as `184875d`, also unpushed.
   Input setup/review is committed as `bff8e5b`, also unpushed.
+  Offline CI is committed as `7eb4ed8`, also unpushed.
 - No Azure deployment, paid inference, real student data or email without the
   relevant explicit approvals.
 - Local development is localhost-only and synthetic-data-only. SQLite is not the
