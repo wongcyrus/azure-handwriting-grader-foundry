@@ -18,11 +18,12 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
   not pushed. Consumer/lifecycle is committed locally as `48f3336`, not pushed.
   Teacher job HTTP is committed locally as `1411719`, not pushed.
   Teacher job UI is committed locally as `c1fe123`, not pushed.
-  New synthetic operator code and this handoff remain uncommitted
+  Synthetic operator execution is committed locally as `c0ac844`, not pushed.
+  New operator smoke code and this handoff remain uncommitted
   pending review; further commit/publication is not authorized.
 - A fresh GitHub clone contains the application through `9316676`, not the newer
-  local execution/reconciliation/delivery/consumer/HTTP/UI increments or uncommitted
-  operator code. Continue in this worktree for those.
+  local execution/reconciliation/delivery/consumer/HTTP/UI/operator increments
+  or uncommitted operator smoke code. Continue in this worktree for those.
 - Engine pin: `3b155f9232cb0730587d89677c932ea049dd7f71`.
 - New cloud dependencies belong here, not in the engine's default installation.
 - No Azure resources, paid inference, email or real student uploads authorized.
@@ -47,6 +48,7 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | Teacher offline job HTTP | Confirmed mapped-input preparation/request/cancellation, owner-indexed bounded listing and lifecycle/historical results; current exam ETags, no worker execution route |
 | Teacher offline job UI | Explicit consent, stable request replay, manual bounded list/status/result reads, historical summaries, confirmed cancellation and reload preserving edits until explicit discard; synthetic only |
 | Local synthetic operator | Explicit development-only one-job command, dedicated identities, named scoped reconciliation, at most one send/validation attempt, manual retry eligibility and confirmed-control/result reuse; no daemon or production auth |
+| Reproducible operator smoke | Explicit opt-in HTTP → named operator → current/historical result flow, no-CSV/CSV modes, replay/stale revalidation guards and retained original smoke behavior; no paid/cloud execution |
 | Attendance | Optional complete CSV upload, status preview and independent teacher attestation; production acceptance pending |
 | Region review | First-present-script JPEG template, actual pixel dimensions, validated drafts and separate geometry attestation |
 | Local teacher canvas | React/TypeScript pointer/keyboard editing, CSS/zoom/DPR conversion, page review, approval and explicit conflict recovery |
@@ -78,6 +80,8 @@ uv run --frozen --extra dev --extra engine python tools/smoke_review.py --region
 uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance --regions
 uv run --frozen --extra dev --extra engine python tools/smoke_review.py --regions --offline-jobs
 uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance --regions --offline-jobs
+uv run --frozen --extra dev --extra engine python tools/smoke_review.py --regions --offline-jobs --offline-operator
+uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance --regions --offline-jobs --offline-operator
 ```
 
 Frontend commands from `apps/web` (own reviewed manifest/lockfile):
@@ -571,6 +575,49 @@ The preceding teacher UI was committed after explicit approval as `c1fe123`,
 not pushed. This operator increment and handoff remain uncommitted pending
 review. No deployment, real student data, paid calls or push occurred.
 
+### Reproducible operator smoke verification
+
+Verified at **2026-11-25T03:27:41+00:00**:
+
+| Check actually run | Result |
+|---|---|
+| `python tools/smoke_review.py --regions --offline-jobs --offline-operator` | Passed; all-roster current validation, no-revalidation replay and immutable historical reads |
+| `python tools/smoke_review.py --attendance --regions --offline-jobs --offline-operator` | Passed; explicit CSV/present-only counts and three retained attestations |
+| `python tools/smoke_review.py` | Passed; unchanged default input flow |
+| `python tools/smoke_review.py --attendance --regions` | Passed; unchanged combined review flow |
+| `python tools/smoke_review.py --regions --offline-jobs` | Passed; unchanged no-CSV request/stale-safe cancellation flow |
+| `python tools/smoke_review.py --attendance --regions --offline-jobs` | Passed; unchanged CSV request/stale-safe cancellation flow |
+| Three incomplete `--offline-operator` flag combinations | Rejected with exit 2 and no smoke stdout before startup |
+| `ruff check .` and `ruff format --check .` | Passed; 42 files |
+| `actionlint .github/workflows/validate.yml` | Passed using the existing reviewed cached actionlint 1.7.12 binary |
+| Documentation links/fences, embedded operator script, selectors and `git diff --check` | Passed; 189 executable Python selectors and four existing browser workflows |
+
+All six smoke commands passed. The opt-in modes use guarded, bounded subprocesses
+of the real operator module; no fake results are injected. Initial validation
+makes one send/claim, a separate invocation reuses the same result with input
+revalidation prohibited, and a post-edit invocation is rejected without changing
+result/lifecycle metadata. Current and historical owner HTTP responses retain
+the original result/hash while exposing the correct current exam ETag.
+
+Only the smoke tool, workflow and handoff documentation changed. Existing CI
+commands remain and both operator modes are explicitly added. No dependencies
+were changed/restored. The prior 394-case Python, eight focused browser and
+34-case full browser/build/geometry evidence remains historical, not new
+pytest/browser runs for this smoke-only increment. Hosted evidence remains
+for `9316676`; newer local commits were not pushed.
+
+API servers and operator children were awaited/cleaned up, and private temporary
+databases/logs/data were removed by their owning contexts. Tokens were not printed,
+stored in source or placed in URLs. Network/Azure-client/approval/grading/sleep
+prohibitions apply inside the operator child; API readiness uses the existing
+bounded localhost check. Smoke child timeouts are not production parser isolation
+or lease-capacity guarantees. No AI, paid calls, real student data or deployment.
+
+The preceding operator increment was committed after explicit approval as
+`c0ac844`, not pushed. This smoke increment and handoff remain uncommitted pending
+review. Before production adapters, resolve the relevant M0 storage/identity/
+tenant/region/privacy decisions; passing synthetic tests is not cloud authorization.
+
 ## Local foundation regression cases
 
 - [x] `tests/test_auth.py::test_valid_delegated_token`: signed delegated token accepted.
@@ -655,11 +702,11 @@ review. No deployment, real student data, paid calls or push occurred.
 
 1. Run the required commands above and inspect `git status --short`.
 2. Do not treat locally committed or untracked implementation as already published.
-3. Next bounded task: persist a reproducible synthetic teacher-request/manual
-  operator/current-and-historical-result live smoke path, using the approved
-  one-job/one-attempt operator scope. Preserve existing default smoke behavior
-  and require explicit flags for operator execution. Never turn teacher HTTP
-  into worker authority. No worker
+3. Next bounded task: resolve the next production storage/identity adapter
+  contract and remaining M0 tenant/region/privacy decisions with the user before
+  selecting resources or changing production authority. Local one-job execution
+  is verified, not deployment or production identity approval. Never turn teacher
+  HTTP into worker authority. No worker
   HTTP authentication or paid-stage admission should be inferred. Preserve
   the approved three-attempt 5/30-second transport policy, separate five-minute
   send/execution fences, immutable reconciliation holds and result reuse.
@@ -1111,3 +1158,26 @@ background queue loop or real transport is added.
   one current job, one send and unchanged exam/history.
 - [ ] Durable queue/transport receipt recovery, production operator/worker auth,
   parsing isolation/timeouts, capacity guarantees, deployment and paid stages.
+
+## Reproducible operator smoke cases
+
+- [x] `tools/smoke_review.py --regions --offline-jobs --offline-operator`:
+  all-roster mode, actual guarded named-operator subprocess, HTTP current result,
+  separate replay with revalidation prohibited, identical result hash/time and
+  unchanged original exam/approval records.
+- [x] `tools/smoke_review.py --attendance --regions --offline-jobs --offline-operator`:
+  explicit CSV, present-only counts, three distinct retained attestations and
+  the same real validation/replay/history checks.
+- [x] Input edits produce `VALIDATED_HISTORICAL`, retaining exact result bytes
+  and returning the current exam ETag; old ETags cannot cancel, completed jobs
+  cannot be cancelled, and stale operator execution is rejected without
+  revalidation or changed lifecycle/result metadata.
+- [x] Operator/network/client/approval/grading/sleep guards and 60-second child
+  test timeout; existing bounded API readiness/process cleanup remains intact.
+- [x] Three incomplete operator flag combinations fail before smoke startup.
+- [x] Original default, attendance+regions and both job-cancellation smoke modes
+  still pass without invoking any operator.
+- [x] Existing CI commands retained; both opt-in operator modes added explicitly;
+  actionlint 1.7.12 passed. No hosted run for these local changes is claimed.
+- [ ] Production identity/storage/queue adapters, parser isolation, school
+  acceptance, deployment and paid evaluation.

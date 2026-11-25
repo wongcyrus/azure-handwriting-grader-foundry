@@ -17,7 +17,8 @@ Bounded simulated delivery is committed locally as `cd6795f`, also not pushed.
 One-shot offline consumption/lifecycle is committed locally as `48f3336`, not pushed.
 Teacher-owned offline job HTTP access is committed locally as `1411719`, not pushed.
 Teacher offline job UI is committed locally as `c1fe123`, not pushed.
-The new bounded synthetic operator command remains uncommitted pending review.
+Bounded synthetic operator execution is committed locally as `c0ac844`, not pushed.
+The new reproducible operator smoke flow remains uncommitted pending review.
 
 ## Implementation status
 
@@ -426,6 +427,32 @@ when available; runtime errors contain codes, not raw exceptions, file paths or 
 An unexpected error leaves existing watermarks/claims for explicit later
 inspection/recovery. There is no forced parser termination or lease renewal.
 No background worker, real queue, scheduler or production identity is installed.
+
+### Reproducible offline operator smoke
+
+Use explicit flags to run the complete synthetic HTTP/operator flow:
+
+```sh
+uv run --frozen --extra dev --extra engine python tools/smoke_review.py \
+  --regions --offline-jobs --offline-operator
+uv run --frozen --extra dev --extra engine python tools/smoke_review.py \
+  --attendance --regions --offline-jobs --offline-operator
+```
+
+`--offline-operator` requires both `--offline-jobs` and `--regions`; without it,
+the existing job smoke only requests/inspects/cancels and starts no operator.
+The opt-in flow uses generated files, a private temporary database and an
+unprinted ephemeral development token. It verifies pending → validated → historical
+states, original approval/version preservation, stable immutable results and
+rejected cancellation/stale execution. Separate fresh invocations test known-result
+reuse without another send or validation; this is not automatic transport retry.
+
+Operator subprocesses prohibit Azure client construction, network connections,
+engine approvals, grading and sleeping. Replay/stale checks additionally prohibit
+input revalidation. Each child has a bounded smoke timeout; that is a test limit,
+not a production parser/claim guarantee. API processes and temporary data are
+cleaned up on success or failure. CI retains its old smoke commands and now
+explicitly includes both operator modes; no hosted result is claimed for local work.
 
 ## Local setup and tests
 

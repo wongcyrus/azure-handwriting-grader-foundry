@@ -49,6 +49,8 @@ jobs:
         run: |
           uv run --frozen --extra dev --extra engine python tools/smoke_review.py
           uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance --regions --offline-jobs
+          uv run --frozen --extra dev --extra engine python tools/smoke_review.py --regions --offline-jobs --offline-operator
+          uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance --regions --offline-jobs --offline-operator
 
       - name: Restore locked frontend dependencies
         working-directory: apps/web

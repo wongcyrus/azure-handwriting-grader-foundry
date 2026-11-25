@@ -18,6 +18,55 @@ from uuid import uuid4
 from openpyxl import Workbook
 from pypdf import PdfWriter
 
+OPERATOR_SMOKE_SCRIPT = """
+import os
+import runpy
+import socket
+import time
+from handwriting_grader.azure_ai import AzureClient
+from handwriting_grader import attendance, grading, regions, rubric
+from handwriting_grader_cloud.preflight import EngineInputValidator
+
+def forbidden(*args, **kwargs):
+    raise AssertionError("Offline smoke must not call AI, network, approval, grading or sleep")
+
+AzureClient.__init__ = forbidden
+socket.socket.connect = forbidden
+socket.socket.connect_ex = forbidden
+time.sleep = forbidden
+for module, name in (
+    (attendance, "approve_attendance"),
+    (grading, "grade_exam"),
+    (regions, "approve_regions"),
+    (rubric, "approve_rubric"),
+):
+    setattr(module, name, forbidden)
+if os.environ["FOUNDRY_SMOKE_REUSE_ONLY"] == "1":
+    EngineInputValidator.validate = forbidden
+runpy.run_module("handwriting_grader_cloud.operator", run_name="__main__")
+"""
+
+
+def run_operator(database, job_id, *, reuse_only=False, expected_returncode=0):
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            OPERATOR_SMOKE_SCRIPT,
+            "--development",
+            "--database",
+            str(database),
+            "--job-id",
+            job_id,
+        ],
+        env={**os.environ, "FOUNDRY_SMOKE_REUSE_ONLY": "1" if reuse_only else "0"},
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert completed.returncode == expected_returncode, "Unexpected offline operator outcome."
+    return json.loads(completed.stdout)
+
 
 def synthetic_files(attendance=False):
     pdf = BytesIO()
@@ -64,7 +113,14 @@ def main():
         action="store_true",
         help="Prepare, request, inspect and cancel an offline check",
     )
+    parser.add_argument(
+        "--offline-operator",
+        action="store_true",
+        help="Explicitly validate the named synthetic job and inspect current/historical results",
+    )
     args = parser.parse_args()
+    if args.offline_operator and not args.offline_jobs:
+        parser.error("--offline-operator requires --offline-jobs and --regions.")
     if args.offline_jobs and not args.regions:
         parser.error("--offline-jobs requires --regions.")
     with socket.socket() as candidate:
@@ -73,6 +129,7 @@ def main():
     token = secrets.token_urlsafe(32)
     environment = {**os.environ, "FOUNDRY_DEV_TOKEN": token}
     with tempfile.TemporaryDirectory(prefix="foundry-http-smoke-") as directory:
+        database = Path(directory) / "control.sqlite3"
         with tempfile.TemporaryFile() as log:
             process = subprocess.Popen(
                 [
@@ -81,7 +138,7 @@ def main():
                     "handwriting_grader_cloud",
                     "--development",
                     "--database",
-                    str(Path(directory) / "control.sqlite3"),
+                    str(database),
                     "--port",
                     str(port),
                 ],
@@ -253,11 +310,39 @@ def main():
                         raise AssertionError("A pending job returned a result.")
                     unchanged, _ = call(f"/api/exams/{exam_id}")
                     assert unchanged == exam
+                    if args.offline_operator:
+                        validated = run_operator(database, job_id)
+                        assert validated["state"] == "VALIDATED"
+                        assert validated["delivery_sends"] == validated["delivery_attempts"] == 1
+                        assert validated["summary"] == {
+                            key: exam["preflight"]["summary"][key]
+                            for key in ("students", "absent", "pdf_pages", "total_marks")
+                        }
+                        status, status_etag = call(f"/api/exams/{exam_id}/jobs/{job_id}")
+                        assert status["state"] == "VALIDATED"
+                        assert status["result_available"]
+                        assert status["result_sha256"] == validated["result_sha256"]
+                        assert status_etag == etag
+                        record, record_etag = call(f"/api/exams/{exam_id}/jobs/{job_id}/result")
+                        assert record["job_id"] == job_id
+                        assert record["binding"]["exam_version"] == exam["version"]
+                        assert record_etag == etag
+                        recovered = run_operator(database, job_id, reuse_only=True)
+                        assert recovered["delivery_sends"] == 0
+                        assert recovered["delivery_attempts"] == 1
+                        assert recovered["result_sha256"] == validated["result_sha256"]
+                        assert recovered["validated_at"] == validated["validated_at"]
+                        after_recovery, _ = call(f"/api/exams/{exam_id}/jobs/{job_id}")
+                        assert after_recovery == status
+                        unchanged, _ = call(f"/api/exams/{exam_id}")
+                        assert unchanged == exam
                     changed, current_etag = call(
                         f"/api/exams/{exam_id}/settings", "PUT", exam["settings"], etag
                     )
                     status, _ = call(f"/api/exams/{exam_id}/jobs/{job_id}")
-                    assert status["state"] == "STALE_INPUTS"
+                    assert status["state"] == (
+                        "VALIDATED_HISTORICAL" if args.offline_operator else "STALE_INPUTS"
+                    )
                     try:
                         call(
                             f"/api/exams/{exam_id}/jobs/{job_id}/cancel",
@@ -269,21 +354,50 @@ def main():
                         assert error.code == 409
                     else:
                         raise AssertionError("A stale ETag cancelled the job.")
-                    cancelled, _ = call(
-                        f"/api/exams/{exam_id}/jobs/{job_id}/cancel",
-                        "POST",
-                        {"confirmed": True},
-                        current_etag,
-                    )
-                    assert cancelled["state"] == "CANCELLED"
-                    status, _ = call(f"/api/exams/{exam_id}/jobs/{job_id}")
-                    assert status["state"] == "CANCELLED"
+                    if args.offline_operator:
+                        historical, historical_etag = call(
+                            f"/api/exams/{exam_id}/jobs/{job_id}/result"
+                        )
+                        assert historical == record
+                        assert historical_etag == current_etag
+                        try:
+                            call(
+                                f"/api/exams/{exam_id}/jobs/{job_id}/cancel",
+                                "POST",
+                                {"confirmed": True},
+                                current_etag,
+                            )
+                        except urllib.error.HTTPError as error:
+                            assert error.code == 409
+                            assert json.loads(error.read())["error"]["code"] == "JOB_COMPLETED"
+                        else:
+                            raise AssertionError("A completed result was cancelled.")
+                        rejected = run_operator(
+                            database, job_id, reuse_only=True, expected_returncode=1
+                        )
+                        assert rejected == {"error": {"code": "STALE_REVIEW"}}
+                        final_status, _ = call(f"/api/exams/{exam_id}/jobs/{job_id}")
+                        assert final_status == status
+                        final_result, _ = call(f"/api/exams/{exam_id}/jobs/{job_id}/result")
+                        assert final_result == record
+                    else:
+                        cancelled, _ = call(
+                            f"/api/exams/{exam_id}/jobs/{job_id}/cancel",
+                            "POST",
+                            {"confirmed": True},
+                            current_etag,
+                        )
+                        assert cancelled["state"] == "CANCELLED"
+                        status, _ = call(f"/api/exams/{exam_id}/jobs/{job_id}")
+                        assert status["state"] == "CANCELLED"
                     final, _ = call(f"/api/exams/{exam_id}")
                     assert final == changed
                 mode = "explicit attendance" if args.attendance else "all-roster default"
                 if args.regions:
                     mode += " and rendered region review"
-                if args.offline_jobs:
+                if args.offline_operator:
+                    mode += " and explicit operator/current-historical results"
+                elif args.offline_jobs:
                     mode += " and confirmed offline request/stale-safe cancellation"
                 print(
                     f"PASS: live localhost auth, synthetic files, {mode}, pinned-engine "

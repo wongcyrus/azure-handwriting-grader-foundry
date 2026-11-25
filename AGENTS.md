@@ -18,7 +18,8 @@ the previous agent's chat or session todo database is not required.
   locally as `cd6795f`, also not pushed. Consumer/lifecycle is committed locally
   as `48f3336`, not pushed. Teacher job HTTP is committed locally as `1411719`,
   not pushed. Teacher job UI is committed locally as `c1fe123`, not pushed.
-  New synthetic operator changes still need separate
+  Synthetic operator execution is committed locally as `c0ac844`, not pushed.
+  New operator smoke changes still need separate
   review/commit/publication approval.
 - No Azure deployment, paid inference, real student data or email without the
   relevant explicit approvals.
@@ -123,6 +124,14 @@ the previous agent's chat or session todo database is not required.
   assignment/snapshot checks; do not claim durable queue recovery. Preserve
   existing retry caps/backoff/fencing, immutable holds and completed result reuse.
   Emit only bounded state/summary/error codes, not raw exceptions or private data.
+- `tools/smoke_review.py --offline-operator` is explicitly opt-in and requires
+  `--offline-jobs --regions`. Existing default/cancellation modes must not invoke
+  the operator. Keep operator subprocess network/client/approval/grading/sleep
+  prohibitions and forbid revalidation during known-result/stale replay checks.
+  Exercise both CSV and all-roster modes with private temporary data and an
+  unprinted token. Preserve immutable result/current-versus-historical semantics
+  and specific-process cleanup; never equate smoke timeouts with production
+  parser isolation or consent for model/deployment calls.
 
 ## Validation and handoff
 
