@@ -17,7 +17,8 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
   Browser input-edge regressions are committed as `66bc1eb` after explicit
   approval, also unpushed. Offline review-workspace hydration is committed as
   `0af4d51` after explicit approval, also unpushed. Explicit engine input
-  approval mapping and this handoff are uncommitted pending review;
+  approval mapping is committed as `ed07852`, also unpushed. Offline validation
+  job control and this handoff are uncommitted pending review;
   publication is not authorized.
 - A fresh GitHub clone does not yet contain the application. Another agent must
   use this worktree until publication is explicitly approved.
@@ -37,10 +38,11 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | Engine bridge | Offline XLSX/PDF/roster/rubric preflight; provenance/integrity and revalidation |
 | Offline review workspace | Owner-scoped hydration, stable config/region paths and byte-identical recovery from immutable local checkpoint references |
 | Engine input approval mapping | Explicit control-owned projection of current API attestations; original bytes/times/revision, pinned read-only validation and stable recovery; no paid/job authority |
+| Offline validation intents/outbox | Explicit confirmed owner requests, immutable idempotent intent + atomic outbox, trusted dispatcher assignment and scoped worker reads; no executor/queue or paid stage |
 | Attendance | Optional complete CSV upload, status preview and independent teacher attestation; production acceptance pending |
 | Region review | First-present-script JPEG template, actual pixel dimensions, validated drafts and separate geometry attestation |
 | Local teacher canvas | React/TypeScript pointer/keyboard editing, CSS/zoom/DPR conversion, page review, approval and explicit conflict recovery |
-| Production Blob/Queue, budgets/jobs | Not implemented |
+| Production Blob/Queue, budgets/job execution | Not implemented |
 | Skills/Foundry protocol/hosting | Not implemented |
 | Teacher setup/input review | Local creation, raw uploads, layout settings, full roster/rubric/status preview and explicit input/attendance approval |
 | Score UI and production login | Not implemented; all browser flows remain synthetic localhost only |
@@ -101,6 +103,7 @@ uv run --frozen --extra dev --extra engine pytest tests/test_attendance.py
 uv run --frozen --extra dev --extra engine pytest tests/test_region_review.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_workspace.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_engine_workspace.py tests/test_workspace.py tests/test_repository.py
+uv run --frozen --extra dev --extra engine pytest tests/test_jobs.py tests/test_engine_workspace.py tests/test_workspace.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_api.py tests/test_auth.py tests/test_repository.py
 ```
 
@@ -256,6 +259,32 @@ No engine approval actions, grading, model clients or network calls are allowed
 in the mapping cases. No dependencies were changed/restored, and nothing was
 pushed, deployed or tested against hosted CI.
 
+### Offline job-intent/outbox verification
+
+Verified at **2026-11-25T01:09:04+00:00**:
+
+| Check actually run | Result |
+|---|---|
+| `pytest tests/test_jobs.py tests/test_engine_workspace.py tests/test_workspace.py tests/test_repository.py` | 70 passed before adding final cross-exam/context-race cases |
+| Full application pytest suite with `dev` + `engine` extras and JUnit | 225 passed, no failures/errors/skips; 68 core and 157 engine cases, including 24 job-control cases |
+| `pytest --collect-only -q -m engine` | Confirmed 157 real-engine cases without rerunning tests |
+| `ruff check .` | Passed |
+| `ruff format --check .` | Passed; 31 files |
+| Documentation links/fences, selectors, JUnit and `git diff --check` | Passed; 103 executable Python selectors |
+
+All initial focused cases passed; two additional scope/race cases were then
+covered by the complete suite. Raw JUnit remains at ignored
+`.local/test-results/pytest.xml`. No dependency changes/restoration occurred.
+API routes, authentication and frontend code are unchanged; prior live HTTP,
+26 browser and 6 geometry results remain historical, not new runs.
+
+The new tables are initialized only by internal `OfflineJobControl`, not by a
+new public API. All jobs are the fixed offline input-validation stage. Tests
+prohibit grading and engine-marked model-client/network guards remain active.
+Neither admission nor dispatch acknowledgement executes a job or sends a queue
+message. No worker HTTP authentication, leases/fencing, result writes, paid
+consent/budgets, cloud resources or hosted CI were implemented/tested.
+
 ## Local foundation regression cases
 
 - [x] `tests/test_auth.py::test_valid_delegated_token`: signed delegated token accepted.
@@ -340,11 +369,11 @@ pushed, deployed or tested against hosted CI.
 
 1. Run the required commands above and inspect `git status --short`.
 2. Do not treat locally committed or untracked implementation as already published.
-3. Next bounded task: define and implement versioned job intent/snapshot/outbox
-  boundaries for explicitly requested offline validation only. Separate worker
-  job context from teacher approval authority; test stale/repeated submission,
-  scoped reads and queue duplication without starting grading. No paid-stage
-  admission, model config or inference before approved consent/budget gates.
+3. Next bounded task: add fenced, expiring claims and cancellation for the fixed
+  offline validation stage, then a read-only validator/result boundary. Duplicate
+  deliveries or concurrent processes sharing an identity must not execute twice;
+  expired/cancelled/stale workers must not publish. Do not connect real queues,
+  add paid stages/model config or execute grading before separate approvals.
 4. Acceptance: no tenant/owner enumeration, bounded pagination, no plaintext
   credentials in URL/storage, and no automatic approvals. Preserve unsaved
   changes when switching an exam. Continue real synthetic API/browser testing.
@@ -475,7 +504,7 @@ records or private traces.
   credentials/deployment steps and no `pull_request_target` execution.
 - [x] Lockfile restore commands, Python/style checks, HTTP smoke, TS/build/style,
   geometry tests and actual synthetic Chrome workflow are represented.
-- [x] Local equivalents: current 201 Python, prior 6 geometry and 26 browser
+- [x] Local equivalents: current 225 Python, prior 6 geometry and 26 browser
   cases passed; hosted results are not claimed.
 - [x] Evidence upload is restricted to synthetic JUnit XML; no raw database,
   browser trace, student record or credential artifact is uploaded.
@@ -550,5 +579,37 @@ replace authoritative API approvals, worker job scope or cost consent.
   checkpoint published.
 - [x] All mapping tests forbid engine `approve_attendance`, `approve_rubric`,
   `approve_regions` and `grade_exam`; engine-marked network/client guards remain.
-- [ ] Actual worker admission, versioned job scope/outbox/fencing, approved paid
-  consent/budgets and engine execution/call checkpoints.
+- [ ] Production worker/execution admission, fenced job scope and outbox delivery,
+  approved paid consent/budgets and engine execution/call checkpoints.
+
+## Offline validation job intent/outbox cases
+
+Local `OfflineJobControl` is internal control code, not production worker
+authentication or an executor. Worker principals are trusted authenticated
+inputs; body-selected roles/recipients are not accepted. Jobs and read grants
+are explicitly non-paid; no automatic submission follows human approval.
+
+- [x] `tests/test_jobs.py::test_explicit_offline_job_and_outbox_survive_restart_without_execution`:
+  real approved mapped inputs with/without CSV, durable intent/outbox, unchanged
+  human approval/version, scoped context and hash-checked roster bytes; no new
+  workspace or execution after process replacement.
+- [x] `tests/test_jobs.py::test_repeated_request_and_duplicate_dispatch_keep_one_stable_job`:
+  same request returns the same job/message, conflicting checkpoint reuse and
+  reassignment fail; duplicate acknowledgement preserves original dispatch time.
+- [x] `tests/test_jobs.py::test_request_model_cannot_select_paid_stage_or_worker`:
+  extra stage/recipient and non-boolean confirmation rejected.
+- [x] `tests/test_jobs.py::test_false_confirmation_and_review_only_checkpoint_do_not_admit_jobs`.
+- [x] `tests/test_jobs.py::test_job_request_and_owner_read_are_teacher_scoped`.
+- [x] `tests/test_jobs.py::test_checkpoint_and_job_ids_cannot_cross_owned_exam_boundaries`.
+- [x] `tests/test_jobs.py::test_dispatch_and_worker_grants_do_not_cross_roles_tenants_or_messages`.
+- [x] `tests/test_jobs.py::test_worker_artifact_grant_excludes_other_files_and_checks_corruption`.
+- [x] `tests/test_jobs.py::test_input_changes_revoke_dispatch_context_and_idempotent_replay`.
+- [x] `tests/test_jobs.py::test_worker_context_rechecks_version_after_loading_its_grant`.
+- [x] `tests/test_jobs.py::test_job_and_outbox_admission_race_rolls_back_both_rows`.
+- [x] `tests/test_jobs.py::test_outbox_insert_failure_rolls_back_the_new_job`.
+- [x] `tests/test_jobs.py::test_job_corruption_or_rehashed_paid_stage_cannot_grant_context`.
+- [x] `tests/test_jobs.py::test_dispatch_outbox_limits_are_strictly_bounded`.
+- [ ] Fenced/expiring execution claims, cancellation, stale-outbox reconciliation,
+  poison handling, executor result persistence and real queue delivery.
+- [ ] Production worker authentication and separate control/artifact permissions,
+  cloud job APIs/UI, approved paid budgets/stages and Foundry runtime execution.

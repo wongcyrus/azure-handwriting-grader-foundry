@@ -15,6 +15,7 @@ Input setup/review `bff8e5b` and offline CI `7eb4ed8` are also local only. Setup
 below apply to this worktree or after implementation files are published.
 Input-edge browser regressions are committed as `66bc1eb`, also unpushed.
 Offline review-workspace hydration is committed as `0af4d51`, also unpushed.
+Explicit engine input approval mapping is committed as `ed07852`, also unpushed.
 
 ## Implementation status
 
@@ -40,6 +41,8 @@ The current increment implements durable **local input/region review and offline
   original input/image references, fixed relative paths and byte-identical recovery.
 - Explicit API-owned projection of current review attestations into engine
   input approval files, checked by the pinned engine without granting a grading job.
+- Internal explicit offline-validation job intents and atomic outbox records:
+  stable request/message IDs, owner scoping and assignment-bound worker artifact reads.
 
 **Not implemented:** production Blob/Queue adapters, all-script orientation/sequence review,
 production sign-in, direct roster/rubric/score editors, pricing and budget gates, grading jobs,
@@ -103,8 +106,51 @@ default is preserved; absence is never inferred.
 Passing engine input validation **does not authorize grading or paid work**.
 Local projections are not authoritative cloud approvals and cannot grant jobs.
 There is no model configuration, grading endpoint, unrestricted agent approval
-tool or worker permission here. Protected job contexts, budgets, outbox,
-leases/fencing, execution checkpoints and cloud storage remain pending.
+tool or worker execution permission here. Internal read-only job scope is
+described below; budgets, execution leases/fencing, execution checkpoints and
+cloud storage remain pending.
+
+### Offline validation job control
+
+Authenticated control code can explicitly request the fixed, non-paid
+`validate_engine_inputs` stage from a current mapped checkpoint:
+
+```python
+from uuid import uuid4
+
+from handwriting_grader_cloud.jobs import OfflineJobControl
+from handwriting_grader_cloud.models import OfflineValidationRequest
+
+control = OfflineJobControl(bridge)
+request = OfflineValidationRequest(
+    checkpoint_id=engine_inputs.checkpoint_id,
+    request_id=uuid4(),
+    confirmed=True,
+)
+job = control.request_validation(principal, exam_id, current_version, request)
+```
+
+Use the same request ID for retrying the same explicit teacher action. An
+identical replay returns the same intent/message; conflicting checkpoint or
+snapshot reuse is rejected. Admission writes the immutable job intent and
+pending outbox together under the exam-version transaction, without changing
+human approvals or the exam version.
+
+`JobDispatcher` and `StageWorker` principals must come from a trusted identity
+boundary, never request-body roles or teacher impersonation. A dispatcher sees
+only its tenant's bounded outbox IDs and can record a same-tenant worker
+assignment. Duplicate acknowledgement preserves the assignment/time; changing
+the recipient is rejected. Assigned workers can read only the matching
+job/message context and referenced, hash-checked artifacts while the approved
+snapshot remains current.
+
+These are **internal local control records, not running jobs**. `DISPATCHED`
+means an acknowledgement was recorded; no queue message is sent and no
+validation executor or grading is started. No worker HTTP routes or production
+service-identity authentication were added. Stale pending records remain for
+future cancellation/reconciliation; read grants are not execution leases.
+Cancellation, expiry/fencing, actual delivery, result publication and cloud
+permissions still require implementation before execution is enabled.
 
 ## Local setup and tests
 

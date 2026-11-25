@@ -362,9 +362,9 @@ class WorkspaceBridge:
             raise
         return Workspace(target, checkpoint_id, digest)
 
-    def restore(
+    def _load_checkpoint(
         self, principal: Principal, exam_id: str, expected: int, checkpoint_id: str
-    ) -> Workspace:
+    ) -> tuple[dict, str, dict[str, bytes], bool]:
         binding, expected_files, _, document = self._source(principal, exam_id, expected)
         manifest, digest = self.service.repository.checkpoint(exam_id, checkpoint_id)
         try:
@@ -397,6 +397,21 @@ class WorkspaceBridge:
                 files[name] = content
         except (KeyError, ValueError, TypeError) as error:
             raise integrity_error() from error
+        return manifest, digest, files, engine_inputs
+
+    def validated_checkpoint(
+        self, principal: Principal, exam_id: str, expected: int, checkpoint_id: str
+    ) -> tuple[dict, str]:
+        manifest, digest, _, _ = self._load_checkpoint(principal, exam_id, expected, checkpoint_id)
+        self.service.repository.assert_version(exam_id, expected)
+        return manifest, digest
+
+    def restore(
+        self, principal: Principal, exam_id: str, expected: int, checkpoint_id: str
+    ) -> Workspace:
+        _, digest, files, engine_inputs = self._load_checkpoint(
+            principal, exam_id, expected, checkpoint_id
+        )
         target = self._write(files, engine_inputs=engine_inputs)
         try:
             self.service.repository.assert_version(exam_id, expected)

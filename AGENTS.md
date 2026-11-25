@@ -20,6 +20,7 @@ the previous agent's chat or session todo database is not required.
   Offline CI is committed as `7eb4ed8`, also unpushed.
   Input-edge browser regressions are committed as `66bc1eb`, also unpushed.
   Offline review-workspace hydration is committed as `0af4d51`, also unpushed.
+  Explicit engine input approval mapping is committed as `ed07852`, also unpushed.
 - No Azure deployment, paid inference, real student data or email without the
   relevant explicit approvals.
 - Local development is localhost-only and synthetic-data-only. SQLite is not the
@@ -44,9 +45,17 @@ the previous agent's chat or session todo database is not required.
   projects current API attestations into pinned engine files without calling
   engine approval actions, changing identities/times or granting job authority.
   Recovery preserves checkpoint kind; never upgrade a review implicitly.
-  Local approval projections are not cloud authority. Model config, paid
-  execution and worker-scoped job admission remain disabled.
+  Local approval projections are not cloud authority. Model config and paid
+  execution remain disabled.
   Preserve the checkpoint write transaction's version check and artifact hashes.
+- `OfflineJobControl` admits only explicitly confirmed `validate_engine_inputs`
+  intents from current owner-approved mapped checkpoints. Intent and outbox
+  commit atomically; request/message identities are stable on replay. Only a
+  trusted `JobDispatcher` can acknowledge delivery and assign a same-tenant
+  `StageWorker` read grant. Worker reads are scoped to the job/message/assignment,
+  current snapshot and allowed artifact hashes. These internal roles are not
+  new HTTP authentication or execution permissions. No queue client, executor,
+  leases/fencing or paid-stage admission is implemented yet.
 
 ## Validation and handoff
 

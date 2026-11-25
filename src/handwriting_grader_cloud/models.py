@@ -1,4 +1,5 @@
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr
 
@@ -46,4 +47,10 @@ class RegionDraft(StrictModel):
 class RegionApproval(StrictModel):
     snapshot_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     regions_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    confirmed: StrictBool
+
+
+class OfflineValidationRequest(StrictModel):
+    checkpoint_id: UUID
+    request_id: UUID
     confirmed: StrictBool
