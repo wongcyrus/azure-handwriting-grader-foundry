@@ -18,7 +18,8 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
   approval, also unpushed. Offline review-workspace hydration is committed as
   `0af4d51` after explicit approval, also unpushed. Explicit engine input
   approval mapping is committed as `ed07852`, also unpushed. Offline validation
-  job control and this handoff are uncommitted pending review;
+  job control is committed as `9316676`, also unpushed. Fenced offline execution,
+  cancellation and this handoff are uncommitted pending review;
   publication is not authorized.
 - A fresh GitHub clone does not yet contain the application. Another agent must
   use this worktree until publication is explicitly approved.
@@ -38,11 +39,12 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | Engine bridge | Offline XLSX/PDF/roster/rubric preflight; provenance/integrity and revalidation |
 | Offline review workspace | Owner-scoped hydration, stable config/region paths and byte-identical recovery from immutable local checkpoint references |
 | Engine input approval mapping | Explicit control-owned projection of current API attestations; original bytes/times/revision, pinned read-only validation and stable recovery; no paid/job authority |
-| Offline validation intents/outbox | Explicit confirmed owner requests, immutable idempotent intent + atomic outbox, trusted dispatcher assignment and scoped worker reads; no executor/queue or paid stage |
+| Offline validation intents/outbox | Explicit confirmed owner requests, immutable idempotent intent + atomic outbox, trusted dispatcher assignment and scoped worker reads; no queue or paid stage |
+| Offline validation execution | Internal read-only pinned-engine checks, five-minute per-attempt fenced claims, stale-safe teacher cancellation and immutable/reused results; no scheduler, HTTP worker auth or paid stage |
 | Attendance | Optional complete CSV upload, status preview and independent teacher attestation; production acceptance pending |
 | Region review | First-present-script JPEG template, actual pixel dimensions, validated drafts and separate geometry attestation |
 | Local teacher canvas | React/TypeScript pointer/keyboard editing, CSS/zoom/DPR conversion, page review, approval and explicit conflict recovery |
-| Production Blob/Queue, budgets/job execution | Not implemented |
+| Production Blob/Queue, budgets/paid job execution | Not implemented |
 | Skills/Foundry protocol/hosting | Not implemented |
 | Teacher setup/input review | Local creation, raw uploads, layout settings, full roster/rubric/status preview and explicit input/attendance approval |
 | Score UI and production login | Not implemented; all browser flows remain synthetic localhost only |
@@ -104,6 +106,7 @@ uv run --frozen --extra dev --extra engine pytest tests/test_region_review.py te
 uv run --frozen --extra dev --extra engine pytest tests/test_workspace.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_engine_workspace.py tests/test_workspace.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_jobs.py tests/test_engine_workspace.py tests/test_workspace.py tests/test_repository.py
+uv run --frozen --extra dev --extra engine pytest tests/test_execution.py tests/test_jobs.py tests/test_engine_workspace.py tests/test_workspace.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_api.py tests/test_auth.py tests/test_repository.py
 ```
 
@@ -285,6 +288,40 @@ Neither admission nor dispatch acknowledgement executes a job or sends a queue
 message. No worker HTTP authentication, leases/fencing, result writes, paid
 consent/budgets, cloud resources or hosted CI were implemented/tested.
 
+### Fenced offline execution verification
+
+Verified at **2026-11-25T01:33:47+00:00**:
+
+| Check actually run | Result |
+|---|---|
+| Focused execution/job/workspace/repository pytest suite | 98 passed after correcting the pending-cancellation assertion |
+| Full application pytest suite with `dev` + `engine` extras and JUnit | 253 passed, no failures/errors/skips; 68 core and 185 real-engine cases, including 28 new execution cases |
+| `pytest --collect-only -q -m engine` | Confirmed 185 engine-marked cases without rerunning tests |
+| `ruff check .` and `ruff format --check .` | Passed; 33 files |
+| Documentation links/fences and named Python selectors | Passed; 119 executable selectors |
+
+The first focused run reported 94 passed and one test failure: a cancelled,
+never-dispatched job correctly returned `NOT_FOUND` to an unassigned worker,
+not `JOB_CANCELLED`. The assertion was corrected without weakening access
+checks. The next focused run passed all 98 cases. An intermediate full run
+passed 251 cases; two final expiry/provenance cases were then added and the
+complete 253-case suite passed. No failure is reported as a pass.
+
+Five minutes is the confirmed initial server-clock claim default, not a measured
+production capacity guarantee. Tests cover exact expiry, simultaneous claims,
+recovery, overlapping old/new validation, transactional rollback and immutable
+result reuse. Expiry/cancellation does not forcibly stop a native parser.
+Replacement is eligible on the next attempt; no queue consumer/scheduler or
+claim renewal is implemented. Both before/after validation provenance checks
+must pass, and only the current live fence/current snapshot can commit.
+
+Raw JUnit remains at ignored `.local/test-results/pytest.xml`. API routes,
+authentication and frontend sources are unchanged; previous live HTTP,
+26 browser and 6 geometry results remain historical, not new runs.
+No dependencies were changed/restored. No grading, approval actions, model
+clients, network calls, real student data, cloud resources, push or new commit
+were used. New execution code/tests and this handoff await separate review.
+
 ## Local foundation regression cases
 
 - [x] `tests/test_auth.py::test_valid_delegated_token`: signed delegated token accepted.
@@ -352,7 +389,7 @@ consent/budgets, cloud resources or hosted CI were implemented/tested.
 - [ ] Current verified pricing, consent per paid stage and initial conversational allowance.
 - [ ] Parallel budget reservations, unknown usage and administrator pause.
 - [ ] Approval + job outbox atomicity; dispatch failure, queue duplicates and poison messages.
-- [ ] Fenced execution, incremental engine checkpoints and unknown provider outcomes.
+- [ ] Production fenced execution, incremental grading checkpoints and unknown provider outcomes.
 - [ ] Cooperative cancellation/SIGTERM with synchronous grading thread still active.
 - [ ] Real SkillsProvider load/resource read and approved typed tool selection.
 - [ ] Prompt injection cannot grant approval or arbitrary paths/tools.
@@ -369,10 +406,12 @@ consent/budgets, cloud resources or hosted CI were implemented/tested.
 
 1. Run the required commands above and inspect `git status --short`.
 2. Do not treat locally committed or untracked implementation as already published.
-3. Next bounded task: add fenced, expiring claims and cancellation for the fixed
-  offline validation stage, then a read-only validator/result boundary. Duplicate
-  deliveries or concurrent processes sharing an identity must not execute twice;
-  expired/cancelled/stale workers must not publish. Do not connect real queues,
+3. Next bounded task: reconcile stale/poison local outbox records and define
+  bounded offline delivery/retry observability before a queue adapter. Preserve
+  five-minute per-attempt fencing, cancellation and immutable result reuse.
+  A live duplicate cannot start execution; expiry may allow overlapping CPU
+  validation but only the current live attempt can publish. Retry eligibility
+  does not mean a scheduler/consumer exists. Do not connect real queues,
   add paid stages/model config or execute grading before separate approvals.
 4. Acceptance: no tenant/owner enumeration, bounded pagination, no plaintext
   credentials in URL/storage, and no automatic approvals. Preserve unsaved
@@ -609,7 +648,44 @@ are explicitly non-paid; no automatic submission follows human approval.
 - [x] `tests/test_jobs.py::test_outbox_insert_failure_rolls_back_the_new_job`.
 - [x] `tests/test_jobs.py::test_job_corruption_or_rehashed_paid_stage_cannot_grant_context`.
 - [x] `tests/test_jobs.py::test_dispatch_outbox_limits_are_strictly_bounded`.
-- [ ] Fenced/expiring execution claims, cancellation, stale-outbox reconciliation,
-  poison handling, executor result persistence and real queue delivery.
+- [x] Local fenced/expiring execution claims, teacher cancellation and immutable
+  read-only validation results; cases below.
+- [ ] Stale-outbox reconciliation, poison handling and real queue delivery.
 - [ ] Production worker authentication and separate control/artifact permissions,
   cloud job APIs/UI, approved paid budgets/stages and Foundry runtime execution.
+
+## Fenced offline execution cases
+
+These synthetic real-engine cases prohibit approval/grading actions and run
+under the engine-marked network/model-client guards. The default five-minute
+server-clock claim and expiry replacement apply only to read-only validation.
+Tests inject a deterministic timezone-aware clock; they do not sleep or prove
+production throughput. No queue consumer, retry scheduler or runtime lease
+renewal is implemented.
+
+- [x] `tests/test_execution.py::test_real_readonly_execution_and_immutable_result_survive_restart`:
+  with/without attendance, actual engine preflight/approval compatibility,
+  unchanged human authority, scoped workspace cleanup and durable result reuse
+  without a second validator call or Teacher impersonation.
+- [x] `tests/test_execution.py::test_live_claim_retries_do_not_restart_or_extend_attempts`.
+- [x] `tests/test_execution.py::test_expiry_replaces_claim_and_fences_old_completion`:
+  exact deadline, higher replacement fence, old-attempt rejection and duplicate
+  completion returning the original result rather than overwriting it.
+- [x] `tests/test_execution.py::test_teacher_cancellation_revokes_claims_and_pending_delivery_even_when_stale`.
+- [x] `tests/test_execution.py::test_execution_claim_cannot_cross_worker_roles_or_assignments`.
+- [x] `tests/test_execution.py::test_cancellation_and_historical_results_remain_teacher_owned`.
+- [x] `tests/test_execution.py::test_attempt_ids_messages_and_caller_lease_fields_are_not_authority`.
+- [x] `tests/test_execution.py::test_late_validation_cannot_publish_after_cancellation_change_or_expiry`.
+- [x] `tests/test_execution.py::test_replacement_can_finish_before_expired_original_returns`:
+  overlapping read-only attempts, only the replacement's immutable result commits.
+- [x] `tests/test_execution.py::test_result_insert_and_completion_are_atomic_and_retry_after_crash`.
+- [x] `tests/test_execution.py::test_expiry_during_result_transaction_rolls_back_publication`.
+- [x] `tests/test_execution.py::test_competing_process_attempts_sharing_identity_have_only_one_live_claim`:
+  concurrent SQLite claims after synchronized context reads; one winner.
+- [x] `tests/test_execution.py::test_claim_survives_repository_replacement_without_extending_expiry`.
+- [x] `tests/test_execution.py::test_changed_engine_pin_blocks_validation_publication`:
+  mismatched provenance before parsing or immediately after real validation.
+- [x] `tests/test_execution.py::test_corrupt_scoped_artifact_prevents_execution_result`.
+- [x] `tests/test_execution.py::test_completed_result_is_integrity_checked_and_remains_historical`.
+- [ ] Production parsing isolation, capacity/lease sizing, worker authentication,
+  cloud control/data permissions and paid-stage result/usage checkpoints.

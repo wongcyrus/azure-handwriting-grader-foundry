@@ -10,7 +10,7 @@ def job_integrity_error() -> ApplicationError:
 
 
 class JobRepository:
-    """Local control records only; no queue connection or execution lease."""
+    """Local control records; no queue connection."""
 
     def __init__(self, repository: SQLiteRepository):
         self.repository = repository
@@ -34,6 +34,17 @@ class JobRepository:
                     worker_id TEXT,
                     dispatched_at TEXT
                 );
+                CREATE TABLE IF NOT EXISTS offline_job_execution (
+                    job_id TEXT PRIMARY KEY REFERENCES offline_validation_jobs(id),
+                    document TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS offline_validation_results (
+                    job_id TEXT PRIMARY KEY REFERENCES offline_validation_jobs(id),
+                    document TEXT NOT NULL,
+                    sha256 TEXT NOT NULL
+                );
+                INSERT OR IGNORE INTO offline_job_execution (job_id, document)
+                    SELECT id, '{"state":"READY","fence":0}' FROM offline_validation_jobs;
                 """
             )
 
@@ -41,13 +52,18 @@ class JobRepository:
     def _decode(row) -> dict:
         if row is None:
             raise ApplicationError("NOT_FOUND", "Offline job not found.", 404)
-        encoded, digest, message_id, worker_id, dispatched_at = row
+        encoded, digest, message_id, worker_id, dispatched_at, execution_json = row
         try:
             document = json.loads(encoded)
+            execution = json.loads(execution_json)
             if (
                 hashlib.sha256(encoded.encode()).hexdigest() != digest
                 or document["message_id"] != message_id
                 or (worker_id is None) != (dispatched_at is None)
+                or execution["state"]
+                not in ("READY", "CLAIMED", "RUNNING", "COMPLETED", "CANCELLED")
+                or type(execution["fence"]) is not int
+                or execution["fence"] < 0
             ):
                 raise job_integrity_error()
         except (ValueError, TypeError, KeyError) as error:
@@ -55,7 +71,14 @@ class JobRepository:
         return {
             "intent": document,
             "intent_sha256": digest,
-            "state": "PENDING_DISPATCH" if worker_id is None else "DISPATCHED",
+            "state": (
+                execution["state"]
+                if execution["state"] != "READY"
+                else "PENDING_DISPATCH"
+                if worker_id is None
+                else "DISPATCHED"
+            ),
+            "execution": execution,
             "worker_id": worker_id,
             "dispatched_at": dispatched_at,
         }
@@ -63,8 +86,9 @@ class JobRepository:
     @staticmethod
     def _select(connection, where: str, parameters):
         return connection.execute(
-            "SELECT j.document, j.sha256, o.message_id, o.worker_id, o.dispatched_at "
+            "SELECT j.document, j.sha256, o.message_id, o.worker_id, o.dispatched_at, e.document "
             "FROM offline_validation_jobs j JOIN offline_job_outbox o ON o.job_id=j.id "
+            "JOIN offline_job_execution e ON e.job_id=j.id "
             f"WHERE {where}",
             parameters,
         ).fetchone()
@@ -125,6 +149,10 @@ class JobRepository:
                 "INSERT INTO offline_job_outbox (job_id, message_id) VALUES (?, ?)",
                 (document["id"], document["message_id"]),
             )
+            connection.execute(
+                "INSERT INTO offline_job_execution VALUES (?, ?)",
+                (document["id"], '{"state":"READY","fence":0}'),
+            )
         return self.get(document["id"])
 
     def pending(self, tenant_id: str, limit: int) -> list[dict]:
@@ -132,7 +160,9 @@ class JobRepository:
             rows = connection.execute(
                 "SELECT j.id, o.message_id FROM offline_validation_jobs j "
                 "JOIN offline_job_outbox o ON o.job_id=j.id "
-                "WHERE j.tenant_id=? AND o.worker_id IS NULL ORDER BY j.id LIMIT ?",
+                "JOIN offline_job_execution e ON e.job_id=j.id "
+                "WHERE j.tenant_id=? AND o.worker_id IS NULL "
+                "AND json_extract(e.document, '$.state')='READY' ORDER BY j.id LIMIT ?",
                 (tenant_id, limit),
             ).fetchall()
         return [{"job_id": job_id, "message_id": message_id} for job_id, message_id in rows]
@@ -147,6 +177,8 @@ class JobRepository:
             current = self._decode(self._select(connection, "j.id=?", (intent["id"],)))
             if current["intent_sha256"] != job["intent_sha256"]:
                 raise job_integrity_error()
+            if current["state"] == "CANCELLED":
+                raise ApplicationError("JOB_CANCELLED", "This job has been cancelled.", 409)
             if current["worker_id"] is not None:
                 if current["worker_id"] != worker_id:
                     raise ApplicationError(

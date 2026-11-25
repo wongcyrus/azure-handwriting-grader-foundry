@@ -21,6 +21,7 @@ the previous agent's chat or session todo database is not required.
   Input-edge browser regressions are committed as `66bc1eb`, also unpushed.
   Offline review-workspace hydration is committed as `0af4d51`, also unpushed.
   Explicit engine input approval mapping is committed as `ed07852`, also unpushed.
+  Offline validation intent/outbox control is committed as `9316676`, also unpushed.
 - No Azure deployment, paid inference, real student data or email without the
   relevant explicit approvals.
 - Local development is localhost-only and synthetic-data-only. SQLite is not the
@@ -54,8 +55,19 @@ the previous agent's chat or session todo database is not required.
   trusted `JobDispatcher` can acknowledge delivery and assign a same-tenant
   `StageWorker` read grant. Worker reads are scoped to the job/message/assignment,
   current snapshot and allowed artifact hashes. These internal roles are not
-  new HTTP authentication or execution permissions. No queue client, executor,
-  leases/fencing or paid-stage admission is implemented yet.
+  new HTTP authentication or unrestricted execution permissions.
+- `OfflineValidationExecutor` runs only the fixed read-only input-validation
+  stage. Five-minute server-clock claims use per-attempt UUIDs and monotonic
+  fencing; live duplicates cannot start a second execution. Expiry allows a
+  replacement attempt on its next delivery/call, not forced process termination
+  or automatic queue scheduling. Late/cancelled/stale attempts cannot publish.
+  Teacher cancellation must work even after input changes. Results are immutable,
+  hash-checked and atomically committed with completion under the current exam
+  version and claim. A known completed result is reused, never overwritten.
+  Hydrate only hash-checked scoped job artifacts in a server-controlled private
+  workspace; do not forge Teacher authority or call engine approval/grading
+  actions. No queue client, worker HTTP authentication, model configuration or
+  paid-stage admission is implemented.
 
 ## Validation and handoff
 

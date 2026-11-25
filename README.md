@@ -16,6 +16,8 @@ below apply to this worktree or after implementation files are published.
 Input-edge browser regressions are committed as `66bc1eb`, also unpushed.
 Offline review-workspace hydration is committed as `0af4d51`, also unpushed.
 Explicit engine input approval mapping is committed as `ed07852`, also unpushed.
+Offline job intent/outbox control is committed as `9316676`, also unpushed.
+Fenced offline execution/cancellation and its tests remain uncommitted pending review.
 
 ## Implementation status
 
@@ -43,6 +45,8 @@ The current increment implements durable **local input/region review and offline
   input approval files, checked by the pinned engine without granting a grading job.
 - Internal explicit offline-validation job intents and atomic outbox records:
   stable request/message IDs, owner scoping and assignment-bound worker artifact reads.
+- Internal read-only validation execution: five-minute fenced claims, stale-safe
+  teacher cancellation, immutable results and safe recovery/reuse.
 
 **Not implemented:** production Blob/Queue adapters, all-script orientation/sequence review,
 production sign-in, direct roster/rubric/score editors, pricing and budget gates, grading jobs,
@@ -106,9 +110,9 @@ default is preserved; absence is never inferred.
 Passing engine input validation **does not authorize grading or paid work**.
 Local projections are not authoritative cloud approvals and cannot grant jobs.
 There is no model configuration, grading endpoint, unrestricted agent approval
-tool or worker execution permission here. Internal read-only job scope is
-described below; budgets, execution leases/fencing, execution checkpoints and
-cloud storage remain pending.
+tool or unrestricted worker permission here. Internal read-only job scope is
+described below; paid budgets, incremental grading checkpoints and cloud storage
+remain pending.
 
 ### Offline validation job control
 
@@ -144,13 +148,56 @@ the recipient is rejected. Assigned workers can read only the matching
 job/message context and referenced, hash-checked artifacts while the approved
 snapshot remains current.
 
-These are **internal local control records, not running jobs**. `DISPATCHED`
-means an acknowledgement was recorded; no queue message is sent and no
-validation executor or grading is started. No worker HTTP routes or production
-service-identity authentication were added. Stale pending records remain for
-future cancellation/reconciliation; read grants are not execution leases.
-Cancellation, expiry/fencing, actual delivery, result publication and cloud
-permissions still require implementation before execution is enabled.
+Admission and dispatch are **internal local control records, not execution**.
+`DISPATCHED` means an acknowledgement was recorded; no queue message is sent and
+no validation or grading starts automatically. Read grants are not execution
+claims. No worker HTTP routes or production service-identity authentication
+were added. Real queue delivery, stale-outbox reconciliation and cloud permission
+separation remain pending.
+
+### Fenced offline execution
+
+Trusted internal control/worker code can explicitly run the requested check:
+
+```python
+from pathlib import Path
+
+from handwriting_grader_cloud.execution import OfflineValidationExecutor
+
+job_id = job["intent"]["id"]
+message_id = job["intent"]["message_id"]
+control.acknowledge_dispatch(dispatcher_principal, job_id, message_id, worker_principal)
+executor = OfflineValidationExecutor(control, Path(".local/validation-workspaces"))
+result = executor.run(worker_principal, job_id, message_id, attempt_id=uuid4())
+```
+
+The stage verifies original file hashes, mapped engine approvals and real
+PDF/roster/rubric/attendance preflight using the pinned engine. It does not read
+handwriting, grade, invoke approval actions, configure a model or call Azure.
+Temporary private workspaces are constructed only from scoped worker artifacts
+and removed after execution; workers never impersonate a Teacher.
+
+A server-owned claim reserves one attempt for **five minutes**. Give each new
+worker/process attempt its own UUID; duplicate claim retries preserve the
+original deadline. Another live attempt is rejected, even when both processes
+share one managed identity. Expiry automatically permits a replacement on its
+next call, with a higher fencing number. It does not kill the old process,
+guarantee no overlapping CPU work after expiry, or schedule a retry by itself.
+Five minutes is a starting default, not a production capacity benchmark or
+an AI billing limit. There is no claim renewal in this increment.
+
+`executor.cancel(principal, exam_id, job_id)` requires the current owner Teacher
+and works even after input changes. Cancellation revokes the claim, blocks
+dispatch/worker reads and preserves the intent and audit time. It is idempotent;
+an already completed result cannot be cancelled or overwritten.
+
+Completion atomically checks the current approved snapshot, assigned worker,
+attempt, fence, expiry and cancellation. Only one immutable, hash-checked
+result commits. Duplicate delivery of a completed current job reuses it without
+rerunning validation. `executor.owned_result(principal, exam_id, job_id)` allows
+the owner to inspect a historical result after later edits; it is not current
+approval or permission to grade. Expired, failed or crashed validation remains
+eligible for a replacement attempt, but no queue consumer/scheduler is running.
 
 ## Local setup and tests
 

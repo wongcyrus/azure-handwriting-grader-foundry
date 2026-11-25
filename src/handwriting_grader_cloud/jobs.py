@@ -59,6 +59,8 @@ class OfflineJobControl:
         return self.jobs.admit(intent)
 
     def _current(self, job: dict) -> dict:
+        if job["state"] == "CANCELLED":
+            raise ApplicationError("JOB_CANCELLED", "This job has been cancelled.", 409)
         intent = job["intent"]
         try:
             binding = intent["binding"]
@@ -151,6 +153,7 @@ class OfflineJobControl:
             "stage": OFFLINE_STAGE,
             "binding": job["intent"]["binding"],
             "checkpoint": checkpoint,
+            "checkpoint_sha256": job["intent"]["checkpoint_sha256"],
             "intent_sha256": job["intent_sha256"],
         }
 
