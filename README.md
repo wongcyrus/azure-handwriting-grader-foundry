@@ -14,6 +14,7 @@ not pushed. Canvas `9f8e2f0` and owned selection `184875d` are also local commit
 Input setup/review `bff8e5b` and offline CI `7eb4ed8` are also local only. Setup commands
 below apply to this worktree or after implementation files are published.
 Input-edge browser regressions are committed as `66bc1eb`, also unpushed.
+Offline review-workspace hydration is committed as `0af4d51`, also unpushed.
 
 ## Implementation status
 
@@ -37,6 +38,8 @@ The current increment implements durable **local input/region review and offline
   roster/rubric/attendance preview before independent human approvals.
 - Internal offline approved-review workspace hydration and durable checkpoints:
   original input/image references, fixed relative paths and byte-identical recovery.
+- Explicit API-owned projection of current review attestations into engine
+  input approval files, checked by the pinned engine without granting a grading job.
 
 **Not implemented:** production Blob/Queue adapters, all-script orientation/sequence review,
 production sign-in, direct roster/rubric/score editors, pricing and budget gates, grading jobs,
@@ -64,9 +67,7 @@ from handwriting_grader_cloud.workspace import WorkspaceBridge
 # service and principal come from the authenticated API/control context.
 bridge = WorkspaceBridge(service, Path(".local/workspaces"))
 workspace = bridge.hydrate(principal, exam_id, current_version)
-recovered = bridge.restore(
-    principal, exam_id, current_version, workspace.checkpoint_id
-)
+recovered = bridge.restore(principal, exam_id, current_version, workspace.checkpoint_id)
 ```
 
 The root is server-controlled and must be private/non-symlink. Each workspace
@@ -75,10 +76,35 @@ accepted as filesystem destinations. SQLite atomically saves the checkpoint
 and derived files after checking the exam version and all referenced bytes.
 Recovery reconstructs the same relative paths and file bytes in a new root.
 
-This is **not a grading-ready workspace**: it preserves API attestations in
+Default hydration is **not a grading-ready workspace**: it preserves API attestations in
 `review-context.json` but generates no engine `approval.json`, model config,
-grading manifest or job authority. Engine approval mapping, protected job
-contexts, leases/fencing, execution checkpoints and cloud storage remain pending.
+grading manifest or job authority.
+
+Authenticated control code can explicitly prepare compatible engine inputs:
+
+```python
+engine_inputs = bridge.prepare_engine_inputs(principal, exam_id, current_version)
+```
+
+This preserves the imported rubric XLSX bytes, saved region revision and
+original API approval times. Explicit CSV uses the attendance attestation's
+UUID as a stable review version and preserves all reviewed IDs/statuses.
+No new human approval is recorded or inferred; the engine's `approve_*` actions
+are never invoked. The engine's read-only `approved_inputs` validator checks
+compatibility before publication and after recovery.
+
+`engine-input-context.json` binds each projected approval to its API identity,
+tenant, original time and file hash. The strict engine attendance format has
+no actor/time fields, so this companion context retains that provenance.
+The existing web preview replaces the need for another attendance-review XLSX;
+the engine reads the matching JSON review. Without CSV the existing all-roster
+default is preserved; absence is never inferred.
+
+Passing engine input validation **does not authorize grading or paid work**.
+Local projections are not authoritative cloud approvals and cannot grant jobs.
+There is no model configuration, grading endpoint, unrestricted agent approval
+tool or worker permission here. Protected job contexts, budgets, outbox,
+leases/fencing, execution checkpoints and cloud storage remain pending.
 
 ## Local setup and tests
 

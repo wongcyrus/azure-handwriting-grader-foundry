@@ -15,8 +15,10 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
   authorized committing verified input setup/review, now `bff8e5b` (unpushed).
   Offline CI is committed as `7eb4ed8` after explicit approval, also unpushed.
   Browser input-edge regressions are committed as `66bc1eb` after explicit
-  approval, also unpushed. The offline review-workspace bridge and this handoff
-  are uncommitted pending review; publication is not authorized.
+  approval, also unpushed. Offline review-workspace hydration is committed as
+  `0af4d51` after explicit approval, also unpushed. Explicit engine input
+  approval mapping and this handoff are uncommitted pending review;
+  publication is not authorized.
 - A fresh GitHub clone does not yet contain the application. Another agent must
   use this worktree until publication is explicitly approved.
 - Engine pin: `3b155f9232cb0730587d89677c932ea049dd7f71`.
@@ -34,6 +36,7 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | Human inputs | Explicit scan order/common layout, snapshot-bound teacher attestation |
 | Engine bridge | Offline XLSX/PDF/roster/rubric preflight; provenance/integrity and revalidation |
 | Offline review workspace | Owner-scoped hydration, stable config/region paths and byte-identical recovery from immutable local checkpoint references |
+| Engine input approval mapping | Explicit control-owned projection of current API attestations; original bytes/times/revision, pinned read-only validation and stable recovery; no paid/job authority |
 | Attendance | Optional complete CSV upload, status preview and independent teacher attestation; production acceptance pending |
 | Region review | First-present-script JPEG template, actual pixel dimensions, validated drafts and separate geometry attestation |
 | Local teacher canvas | React/TypeScript pointer/keyboard editing, CSS/zoom/DPR conversion, page review, approval and explicit conflict recovery |
@@ -97,6 +100,7 @@ uv run --frozen --extra dev --extra engine pytest -m engine
 uv run --frozen --extra dev --extra engine pytest tests/test_attendance.py
 uv run --frozen --extra dev --extra engine pytest tests/test_region_review.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_workspace.py tests/test_repository.py
+uv run --frozen --extra dev --extra engine pytest tests/test_engine_workspace.py tests/test_workspace.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_api.py tests/test_auth.py tests/test_repository.py
 ```
 
@@ -226,6 +230,32 @@ results are retained, not claimed as new frontend runs for this backend incremen
 No dependencies changed or were restored. No inference, deployment or hosted CI
 execution occurred.
 
+### Explicit engine-input mapping verification
+
+Verified at **2026-11-24T16:42:19+00:00**:
+
+| Check actually run | Result |
+|---|---|
+| `pytest tests/test_engine_workspace.py tests/test_workspace.py tests/test_repository.py` | 48 passed; real mapping plus prior workspace/repository regressions |
+| Full application pytest suite with `dev` + `engine` extras and JUnit | 201 passed, no failures/errors/skips; 68 core and 133 engine cases, including 17 new mapping cases |
+| `pytest --collect-only -q -m engine` | Confirmed 133 engine-marked cases without rerunning tests |
+| `ruff check .` | Passed |
+| `ruff format --check .` | Passed; 28 files |
+| Documentation links/fences, selectors, JUnit and `git diff --check` | Passed; 89 executable Python selectors |
+
+The first full-check command stopped at a Python code-fence formatting issue
+in the preceding README example, before pytest ran. That example was corrected
+while updating the bridge documentation; the subsequent complete suite passed.
+The initial focused 48-case run passed without test failures.
+
+API routes, frontend code and repository schema are unchanged in this increment.
+Prior live HTTP, 26 browser and 6 geometry results remain historical evidence,
+not new runs. Original API approval IDs/actors/times and document version/history
+are preserved; mapped inputs are not job or paid-stage permission.
+No engine approval actions, grading, model clients or network calls are allowed
+in the mapping cases. No dependencies were changed/restored, and nothing was
+pushed, deployed or tested against hosted CI.
+
 ## Local foundation regression cases
 
 - [x] `tests/test_auth.py::test_valid_delegated_token`: signed delegated token accepted.
@@ -310,12 +340,11 @@ execution occurred.
 
 1. Run the required commands above and inspect `git status --short`.
 2. Do not treat locally committed or untracked implementation as already published.
-3. Next bounded task: design and implement offline engine approval-file mapping
-  from current API-owned input/attendance/region attestations, using exact pinned
-  engine contracts and synthetic compatibility tests. Keep mapping in the
-  authenticated control boundary, not an agent approval tool. Do not call
-  grading, invent approval times/identities or introduce model config/paid-stage
-  authority before the relevant gates.
+3. Next bounded task: define and implement versioned job intent/snapshot/outbox
+  boundaries for explicitly requested offline validation only. Separate worker
+  job context from teacher approval authority; test stale/repeated submission,
+  scoped reads and queue duplication without starting grading. No paid-stage
+  admission, model config or inference before approved consent/budget gates.
 4. Acceptance: no tenant/owner enumeration, bounded pagination, no plaintext
   credentials in URL/storage, and no automatic approvals. Preserve unsaved
   changes when switching an exam. Continue real synthetic API/browser testing.
@@ -446,7 +475,7 @@ records or private traces.
   credentials/deployment steps and no `pull_request_target` execution.
 - [x] Lockfile restore commands, Python/style checks, HTTP smoke, TS/build/style,
   geometry tests and actual synthetic Chrome workflow are represented.
-- [x] Local equivalents: prior 155 Python, current 6 geometry and 26 browser
+- [x] Local equivalents: current 201 Python, prior 6 geometry and 26 browser
   cases passed; hosted results are not claimed.
 - [x] Evidence upload is restricted to synthetic JUnit XML; no raw database,
   browser trace, student record or credential artifact is uploaded.
@@ -487,9 +516,39 @@ unimplemented.
   missing/corrupt file references roll back all derived artifacts.
 - [x] `tests/test_repository.py::test_existing_checkpoint_cannot_be_replaced`:
   insert-only checkpoint identity; duplicate insertion also rolls back new artifacts.
-- [ ] Engine approval-file mapping, normalized rubric workspace and explicit
-  attendance review artifacts, with authoritative API provenance.
+- [x] Explicit engine approval-file mapping with authoritative API provenance;
+  compatible imported rubric bytes and JSON attendance review, not another
+  normalization/editing step or inferred human approval.
 - [ ] Worker-scoped job context, outbox/leases/fencing, cloud Blob/Queue adapters,
   grading manifests/call watermarks, cancellation and unknown-outcome recovery.
 - [ ] Checkpoint retention/garbage collection, disk quotas and production
   process/filesystem isolation. A private local root is not a tenant sandbox.
+
+## Explicit engine input approval mapping cases
+
+Default `hydrate` remains approval-free. Only authenticated control code calls
+`prepare_engine_inputs`; checkpoint kind distinguishes this explicit projection.
+No engine approval command or grading function is called. Local files do not
+replace authoritative API approvals, worker job scope or cost consent.
+
+- [x] `tests/test_engine_workspace.py::test_explicit_engine_input_mapping_preserves_api_authority_and_recovery`:
+  with/without CSV, real pinned `approved_inputs`, unchanged API records/version,
+  original rubric bytes/artifact reference, original approval times and geometry
+  revision, leading-zero attendance IDs, present-only roster and byte-identical
+  recovery. Prior review checkpoints still restore without approvals.
+- [x] `tests/test_engine_workspace.py::test_engine_input_mapping_and_recovery_require_the_owner`:
+  other teacher/tenant, worker and admin rejected without new workspaces.
+- [x] `tests/test_engine_workspace.py::test_mapping_cannot_invent_missing_approval_identity_or_time`:
+  missing input/region/attendance attestations, naive/invalid time and invalid
+  attendance UUID rejected before filesystem writes.
+- [x] `tests/test_engine_workspace.py::test_rehashed_engine_approval_tampering_cannot_replace_api_provenance`:
+  changed rubric/region approval time or attendance review ID rejected even
+  after recomputing checkpoint/file hashes.
+- [x] `tests/test_engine_workspace.py::test_review_checkpoint_cannot_be_upgraded_by_changing_its_kind`.
+- [x] `tests/test_engine_workspace.py::test_engine_validators_reject_bad_mapping_before_checkpoint_publication`:
+  real engine rejects a bad source hash; partial workspace removed and no
+  checkpoint published.
+- [x] All mapping tests forbid engine `approve_attendance`, `approve_rubric`,
+  `approve_regions` and `grade_exam`; engine-marked network/client guards remain.
+- [ ] Actual worker admission, versioned job scope/outbox/fencing, approved paid
+  consent/budgets and engine execution/call checkpoints.

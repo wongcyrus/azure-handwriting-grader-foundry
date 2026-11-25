@@ -4,8 +4,9 @@ import os
 import shutil
 import stat
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from .auth import Principal
 from .errors import ApplicationError
@@ -19,6 +20,8 @@ INPUT_PATHS = {
     "rubric": "inputs/rubric.xlsx",
     "attendance": "inputs/attendance.csv",
 }
+REVIEW_WORKSPACE = "offline_review_workspace"
+ENGINE_INPUT_WORKSPACE = "offline_engine_input_workspace"
 
 
 def json_bytes(value: dict) -> bytes:
@@ -39,7 +42,7 @@ class Workspace:
 
 
 class WorkspaceBridge:
-    """Offline review workspace only; no engine approvals, model config or job authority."""
+    """Owner-scoped offline input workspaces; never model config or job authority."""
 
     def __init__(self, service: ExamService, root: Path):
         self.service = service
@@ -62,7 +65,7 @@ class WorkspaceBridge:
 
     def _source(
         self, principal: Principal, exam_id: str, expected: int
-    ) -> tuple[dict, dict[str, bytes], dict[str, str]]:
+    ) -> tuple[dict, dict[str, bytes], dict[str, str], dict]:
         document = self.service.current(principal, exam_id, expected)
         if document["state"] != "REGIONS_REVIEWED":
             raise ApplicationError(
@@ -126,7 +129,7 @@ class WorkspaceBridge:
             files, references = self._files(document, contents, approvals, binding)
         except (KeyError, TypeError, ValueError) as error:
             raise integrity_error() from error
-        return binding, files, references
+        return binding, files, references, document
 
     def _files(self, document, contents, approvals, binding):
         engine_functions()
@@ -182,7 +185,105 @@ class WorkspaceBridge:
             references[path] = page["artifact_id"]
         return files, references
 
-    def _write(self, files: dict[str, bytes]) -> Path:
+    @staticmethod
+    def _engine_files(document: dict, base_files: dict[str, bytes]) -> dict[str, bytes]:
+        engine_functions()
+        from handwriting_grader.regions import config_hash
+
+        files = dict(base_files)
+        config = json.loads(files["exam.config.json"])
+        context = json.loads(files["review-context.json"])
+        approvals = context["approvals"]
+        try:
+            for approval in approvals.values():
+                UUID(approval["id"])
+                if datetime.fromisoformat(approval["at"]).tzinfo is None:
+                    raise integrity_error()
+            config_digest = config_hash(config)
+            rubric_digest = hashlib.sha256(files[INPUT_PATHS["rubric"]]).hexdigest()
+            files["output/rubric/rubric.xlsx"] = files[INPUT_PATHS["rubric"]]
+            files["output/rubric/manifest.json"] = json_bytes(
+                {
+                    "version": 1,
+                    "exam_config_sha256": config_digest,
+                    "source_sha256": rubric_digest,
+                    "origin": "xlsx",
+                }
+            )
+            files["output/rubric/approval.json"] = json_bytes(
+                {
+                    "version": 1,
+                    "rubric_sha256": rubric_digest,
+                    "exam_config_sha256": config_digest,
+                    "source_sha256": rubric_digest,
+                    "approved_at": approvals["inputs"]["at"],
+                }
+            )
+            region_manifest = json.loads(files["output/regions/manifest.json"])
+            region_draft = json.loads(files["output/regions/draft.json"])
+            files["output/regions/approval.json"] = json_bytes(
+                {
+                    "annotations_sha256": hashlib.sha256(
+                        files["output/regions/annotations.json"]
+                    ).hexdigest(),
+                    "config_sha256": config_digest,
+                    "pdf_sha256": region_manifest["pdf_sha256"],
+                    "revision": region_draft["revision"],
+                    "approved_at": approvals["regions"]["at"],
+                }
+            )
+            mapped = {
+                "rubric": ("inputs", "output/rubric/approval.json"),
+                "regions": ("regions", "output/regions/approval.json"),
+            }
+            if "attendance" in approvals:
+                review_id = UUID(approvals["attendance"]["id"]).hex
+                root = f"output/attendance/versions/{review_id}"
+                review = {
+                    "version": 1,
+                    "config_sha256": config_digest,
+                    "attendance_sha256": hashlib.sha256(
+                        files[INPUT_PATHS["attendance"]]
+                    ).hexdigest(),
+                    "roster_sha256": hashlib.sha256(files[INPUT_PATHS["roster"]]).hexdigest(),
+                    "students": document["preflight"]["attendance_review"],
+                }
+                files[f"{root}/review.json"] = json_bytes(review)
+                files["output/attendance/current.json"] = json_bytes(
+                    {"version": 1, "review_id": review_id}
+                )
+                files[f"{root}/approval.json"] = json_bytes(
+                    {
+                        "version": 1,
+                        "review_sha256": hashlib.sha256(files[f"{root}/review.json"]).hexdigest(),
+                        "review_id": review_id,
+                    }
+                )
+                mapped["attendance"] = ("attendance", f"{root}/approval.json")
+            files["engine-input-context.json"] = json_bytes(
+                {
+                    "version": 1,
+                    "engine_commit": ENGINE_COMMIT,
+                    "scope": "offline_approved_inputs_only",
+                    "binding": context["binding"],
+                    "mapped_approvals": {
+                        kind: {
+                            "api_approval_id": approvals[source]["id"],
+                            "actor_id": approvals[source]["actor_id"],
+                            "tenant_id": approvals[source]["tenant_id"],
+                            "approved_at": approvals[source]["at"],
+                            "path": path,
+                            "sha256": hashlib.sha256(files[path]).hexdigest(),
+                        }
+                        for kind, (source, path) in mapped.items()
+                    },
+                }
+            )
+        except (KeyError, TypeError, ValueError, AttributeError) as error:
+            raise integrity_error() from error
+        return files
+
+    def _write(self, files: dict[str, bytes], *, engine_inputs: bool = False) -> Path:
         if any(path.is_symlink() for path in (self.root, *self.root.parents)):
             raise ApplicationError("UNSAFE_WORKSPACE", "Use a private non-symlink workspace root.")
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -200,14 +301,14 @@ class WorkspaceBridge:
                     file.write(content)
                     file.flush()
                     os.fsync(file.fileno())
-            self._verify_engine(target)
+            self._verify_engine(target, engine_inputs=engine_inputs)
         except BaseException:
             shutil.rmtree(target)
             raise
         return target
 
     @staticmethod
-    def _verify_engine(target: Path) -> None:
+    def _verify_engine(target: Path, *, engine_inputs: bool = False) -> None:
         engine_functions()
         from handwriting_grader.regions import verify_run
 
@@ -215,11 +316,24 @@ class WorkspaceBridge:
         config = json.loads(config_path.read_bytes())
         try:
             verify_run(config, target, config_path)
+            if engine_inputs:
+                from handwriting_grader.grading import approved_inputs
+
+                approved_inputs(config, target, config_path)
         except (OSError, ValueError, TypeError, KeyError) as error:
             raise integrity_error() from error
 
     def hydrate(self, principal: Principal, exam_id: str, expected: int) -> Workspace:
-        binding, files, references = self._source(principal, exam_id, expected)
+        binding, files, references, _ = self._source(principal, exam_id, expected)
+        return self._publish(exam_id, expected, binding, files, references, REVIEW_WORKSPACE)
+
+    def prepare_engine_inputs(self, principal: Principal, exam_id: str, expected: int) -> Workspace:
+        binding, files, references, document = self._source(principal, exam_id, expected)
+        files = self._engine_files(document, files)
+        references["output/rubric/rubric.xlsx"] = references[INPUT_PATHS["rubric"]]
+        return self._publish(exam_id, expected, binding, files, references, ENGINE_INPUT_WORKSPACE)
+
+    def _publish(self, exam_id, expected, binding, files, references, kind) -> Workspace:
         checkpoint_id = str(uuid4())
         metadata, artifacts = {}, []
         for name, content in files.items():
@@ -233,12 +347,12 @@ class WorkspaceBridge:
                 artifacts.append((artifact_id, content))
         manifest = {
             "version": 1,
-            "kind": "offline_review_workspace",
+            "kind": kind,
             "engine_commit": ENGINE_COMMIT,
             "binding": binding,
             "files": metadata,
         }
-        target = self._write(files)
+        target = self._write(files, engine_inputs=kind == ENGINE_INPUT_WORKSPACE)
         try:
             digest = self.service.repository.save_checkpoint(
                 exam_id, expected, checkpoint_id, manifest, artifacts
@@ -251,17 +365,21 @@ class WorkspaceBridge:
     def restore(
         self, principal: Principal, exam_id: str, expected: int, checkpoint_id: str
     ) -> Workspace:
-        binding, expected_files, _ = self._source(principal, exam_id, expected)
+        binding, expected_files, _, document = self._source(principal, exam_id, expected)
         manifest, digest = self.service.repository.checkpoint(exam_id, checkpoint_id)
         try:
             if (
                 set(manifest) != {"version", "kind", "engine_commit", "binding", "files"}
                 or manifest["version"] != 1
-                or manifest["kind"] != "offline_review_workspace"
+                or manifest["kind"] not in {REVIEW_WORKSPACE, ENGINE_INPUT_WORKSPACE}
                 or manifest["engine_commit"] != ENGINE_COMMIT
                 or manifest["binding"] != binding
-                or set(manifest["files"]) != set(expected_files)
             ):
+                raise integrity_error()
+            engine_inputs = manifest["kind"] == ENGINE_INPUT_WORKSPACE
+            if engine_inputs:
+                expected_files = self._engine_files(document, expected_files)
+            if set(manifest["files"]) != set(expected_files):
                 raise integrity_error()
             files = {}
             for name, expected_content in expected_files.items():
@@ -279,7 +397,7 @@ class WorkspaceBridge:
                 files[name] = content
         except (KeyError, ValueError, TypeError) as error:
             raise integrity_error() from error
-        target = self._write(files)
+        target = self._write(files, engine_inputs=engine_inputs)
         try:
             self.service.repository.assert_version(exam_id, expected)
         except BaseException:

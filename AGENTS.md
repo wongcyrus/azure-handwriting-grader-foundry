@@ -19,6 +19,7 @@ the previous agent's chat or session todo database is not required.
   Input setup/review is committed as `bff8e5b`, also unpushed.
   Offline CI is committed as `7eb4ed8`, also unpushed.
   Input-edge browser regressions are committed as `66bc1eb`, also unpushed.
+  Offline review-workspace hydration is committed as `0af4d51`, also unpushed.
 - No Azure deployment, paid inference, real student data or email without the
   relevant explicit approvals.
 - Local development is localhost-only and synthetic-data-only. SQLite is not the
@@ -38,8 +39,13 @@ the previous agent's chat or session todo database is not required.
 - `WorkspaceBridge` is an internal offline review-workspace adapter. Hydration
   and recovery require the current owner's authenticated Teacher principal and
   current input/region attestations (plus explicit CSV attendance attestation).
-  Use a server-controlled private root, not caller-supplied paths. Checkpoints
-  do not authorize jobs; no engine approval files or model config are generated.
+  Use a server-controlled private root, not caller-supplied paths. Default
+  hydration never creates engine approvals. Explicit `prepare_engine_inputs`
+  projects current API attestations into pinned engine files without calling
+  engine approval actions, changing identities/times or granting job authority.
+  Recovery preserves checkpoint kind; never upgrade a review implicitly.
+  Local approval projections are not cloud authority. Model config, paid
+  execution and worker-scoped job admission remain disabled.
   Preserve the checkpoint write transaction's version check and artifact hashes.
 
 ## Validation and handoff
