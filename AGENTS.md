@@ -13,7 +13,8 @@ the previous agent's chat or session todo database is not required.
 - Do not commit or push implementation/checklist changes until the user reviews
   and explicitly approves them. Public `main` now contains the application
   through `9316676`, with successful hosted offline CI. Fenced offline execution
-  is committed locally as `8152657`, not pushed. New reconciliation changes
+  is committed locally as `8152657`, not pushed. Outbox reconciliation is
+  committed locally as `9631574`, also not pushed. New simulated-delivery changes
   still need separate review/commit/publication approval.
 - No Azure deployment, paid inference, real student data or email without the
   relevant explicit approvals.
@@ -70,6 +71,16 @@ the previous agent's chat or session todo database is not required.
   Normal pending delivery excludes holds and assignment rechecks them.
   `CURRENT` is metadata consistency, not full artifact/engine validation.
   No automatic hold release, retry scheduler or real transport is implemented.
+- `OfflineDispatcher` implements only the synthetic queue contract. The approved
+  policy is three total attempts with 5-second then 30-second waits; no automatic
+  fourth attempt or paid-call retry. Persist send watermarks before side effects,
+  preserve stable job/message/recipient identity and per-attempt fencing.
+  Confirm enqueue and assignment atomically under current snapshot/claim checks.
+  Unknown send outcomes may duplicate messages but cannot invent confirmation;
+  terminal exhaustion creates an immutable `DELIVERY_REVIEW` hold.
+  Never bypass managed delivery through the legacy acknowledgement API.
+  `SimulatedQueue` is not durable storage. No consumer, scheduler, real queue
+  client, production dispatcher identity or new HTTP permission is implemented.
 
 ## Validation and handoff
 

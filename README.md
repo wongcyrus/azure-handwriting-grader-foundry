@@ -12,7 +12,8 @@ The reusable grading engine is a pinned optional dependency, not copied into thi
 including input/region review, teacher UI, workspace mapping and offline job
 intents/outbox. Hosted offline CI passed for that commit. Fenced offline
 execution/cancellation is committed locally as `8152657`, not pushed.
-The new local outbox reconciliation increment remains uncommitted pending review.
+Outbox reconciliation is committed locally as `9631574`, also not pushed.
+The new bounded simulated-delivery increment remains uncommitted pending review.
 
 ## Implementation status
 
@@ -44,6 +45,8 @@ The current increment implements durable **local input/region review and offline
   teacher cancellation, immutable results and safe recovery/reuse.
 - Internal tenant-scoped outbox status and bounded cursor reconciliation:
   immutable stale/invalid-record holds without changing intents or teacher approvals.
+- Bounded simulated delivery: durable send watermarks, three attempts with 5/30-second
+  retry waits, lost-acknowledgement recovery and terminal operator-review holds.
 
 **Not implemented:** production Blob/Queue adapters, all-script orientation/sequence review,
 production sign-in, direct roster/rubric/score editors, pricing and budget gates, grading jobs,
@@ -187,6 +190,58 @@ Cancellation remains a separate Teacher action and can cancel a stale held job.
 Already assigned or cancelled records are not held by this pending-only reconciler.
 This is not a queue poison-message consumer, automatic retry loop, scheduler,
 new HTTP route, worker authentication boundary or paid-stage permission.
+
+### Bounded simulated delivery
+
+Trusted internal dispatcher code can exercise the local delivery contract:
+
+```python
+from handwriting_grader_cloud.delivery import OfflineDispatcher, SimulatedQueue
+
+queue = SimulatedQueue()
+dispatcher = OfflineDispatcher(control, queue)
+job_id = job["intent"]["id"]
+message_id = job["intent"]["message_id"]
+delivery = dispatcher.dispatch(
+    dispatcher_principal, job_id, message_id, worker_principal, attempt_id=uuid4()
+)
+```
+
+The user-approved policy is **three send attempts total**, with server-clock
+waits of **5 seconds then 30 seconds** after unconfirmed outcomes. Calls before
+the deadline return the persisted wait state without sending. There is no timer,
+sleep/retry loop or queue consumer; invoke the next attempt explicitly with a
+new UUID while keeping the original job/message IDs and recipient.
+
+Send reservations use the five-minute server-owned claim default, separate from
+execution claims. A live send cannot be duplicated by another process. Reusing
+its nonce does not resend or extend the reservation. A crash leaves a durable
+`SENDING` watermark; after expiry a new nonce can resume within the remaining
+attempt limit and backoff. Late/replaced receipts cannot grant worker access.
+
+Confirmed enqueue and worker assignment commit atomically after rechecking the
+current approved snapshot and attempt. `DELIVERED` means the simulated enqueue
+was acknowledged, not that validation/grading completed. Known confirmations
+are reused without resending. Lost acknowledgements may produce duplicate
+accepted messages; the same scoped job and fenced executor prevent stale result
+publication, not necessarily overlapping CPU work after expiry.
+
+Three unconfirmed or expired attempts produce an immutable `DELIVERY_REVIEW`
+hold and remove the entry from pending delivery. No fourth send, automatic
+release or fabricated success follows. Unexpected exceptions preserve an unknown
+in-flight watermark instead of pretending delivery failed safely. Human review,
+intent bytes, approval history and execution authority remain unchanged.
+
+Do not use the legacy `acknowledge_dispatch` path for a managed send; it cannot
+bypass the reserved recipient or manufacture a delivery receipt. Existing
+legacy assignments remain supported but are not proof of transport delivery.
+
+`SimulatedQueue` is an **in-memory synthetic buffer**, not durable Azure storage.
+SQLite send records survive restart; the buffer does not. Tests preserving the
+same buffer demonstrate control recovery, not production queue durability.
+There is no real queue adapter, service identity, HTTP dispatcher API, scheduler
+or permission to retry paid model calls. Inspect history with
+`dispatcher.status(dispatcher_principal, job_id)`.
 
 ### Fenced offline execution
 

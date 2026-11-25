@@ -21,7 +21,11 @@ def decode_hold(encoded, digest, job_id: str, message_id: str, tenant_id: str) -
             or hold["message_id"] != message_id
             or hold["tenant_id"] != tenant_id
             or (hold["state"], hold["reason_code"])
-            not in (("STALE", "STALE_JOB"), ("QUARANTINED", "JOB_INTEGRITY"))
+            not in (
+                ("STALE", "STALE_JOB"),
+                ("QUARANTINED", "JOB_INTEGRITY"),
+                ("DELIVERY_REVIEW", "DELIVERY_ATTEMPTS_EXHAUSTED"),
+            )
         ):
             raise job_integrity_error()
         return hold
@@ -64,6 +68,11 @@ class JobRepository:
                     sha256 TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS offline_outbox_holds (
+                    job_id TEXT PRIMARY KEY REFERENCES offline_validation_jobs(id),
+                    document TEXT NOT NULL,
+                    sha256 TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS offline_delivery_control (
                     job_id TEXT PRIMARY KEY REFERENCES offline_validation_jobs(id),
                     document TEXT NOT NULL,
                     sha256 TEXT NOT NULL
@@ -245,6 +254,15 @@ class JobRepository:
                         "DISPATCH_CONFLICT", "This message already has a worker assignment.", 409
                     )
                 return current
+            if (
+                connection.execute(
+                    "SELECT 1 FROM offline_delivery_control WHERE job_id=?", (intent["id"],)
+                ).fetchone()
+                is not None
+            ):
+                raise ApplicationError(
+                    "DELIVERY_MANAGED", "Confirm this managed delivery through its dispatcher.", 409
+                )
             connection.execute(
                 "UPDATE offline_job_outbox SET worker_id=?, dispatched_at=? WHERE job_id=?",
                 (worker_id, dispatched_at, intent["id"]),

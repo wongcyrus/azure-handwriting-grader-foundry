@@ -13,10 +13,11 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
   `184875d`, input setup `bff8e5b`, offline CI `7eb4ed8`, browser edges `66bc1eb`,
   workspace hydration `0af4d51`, engine mapping `ed07852` and job control `9316676`.
 - Fenced execution/cancellation is committed locally as `8152657` after explicit
-  approval, not pushed. New outbox reconciliation and this handoff remain
-  uncommitted pending review; further commit/publication is not authorized.
+  approval, not pushed. Outbox reconciliation is committed locally as `9631574`,
+  also not pushed. New simulated delivery and this handoff remain uncommitted
+  pending review; further commit/publication is not authorized.
 - A fresh GitHub clone contains the application through `9316676`, not the newer
-  local execution/reconciliation increments. Continue in this worktree for those.
+  local execution/reconciliation/delivery increments. Continue in this worktree for those.
 - Engine pin: `3b155f9232cb0730587d89677c932ea049dd7f71`.
 - New cloud dependencies belong here, not in the engine's default installation.
 - No Azure resources, paid inference, email or real student uploads authorized.
@@ -36,6 +37,7 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | Offline validation intents/outbox | Explicit confirmed owner requests, immutable idempotent intent + atomic outbox, trusted dispatcher assignment and scoped worker reads; no queue or paid stage |
 | Offline validation execution | Internal read-only pinned-engine checks, five-minute per-attempt fenced claims, stale-safe teacher cancellation and immutable/reused results; no scheduler, HTTP worker auth or paid stage |
 | Local outbox reconciliation | Trusted dispatcher tenant-scoped cursor inspection, immutable stale/invalid holds, idempotent/race-safe pending cleanup; no actual transport or automatic repair |
+| Simulated delivery | Durable fenced send watermarks, stable recipient/message, three attempts with 5/30-second waits and exhaustion review; no real queue, consumer or scheduler |
 | Attendance | Optional complete CSV upload, status preview and independent teacher attestation; production acceptance pending |
 | Region review | First-present-script JPEG template, actual pixel dimensions, validated drafts and separate geometry attestation |
 | Local teacher canvas | React/TypeScript pointer/keyboard editing, CSS/zoom/DPR conversion, page review, approval and explicit conflict recovery |
@@ -103,6 +105,7 @@ uv run --frozen --extra dev --extra engine pytest tests/test_engine_workspace.py
 uv run --frozen --extra dev --extra engine pytest tests/test_jobs.py tests/test_engine_workspace.py tests/test_workspace.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_execution.py tests/test_jobs.py tests/test_engine_workspace.py tests/test_workspace.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_outbox.py tests/test_jobs.py tests/test_execution.py tests/test_repository.py
+uv run --frozen --extra dev --extra engine pytest tests/test_delivery.py tests/test_outbox.py tests/test_jobs.py tests/test_execution.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_api.py tests/test_auth.py tests/test_repository.py
 ```
 
@@ -361,6 +364,37 @@ authentication and frontend sources are unchanged; prior local browser/geometry
 evidence is historical, not a new local run. This reconciliation increment
 remains uncommitted and unpushed pending separate review.
 
+### Bounded simulated delivery verification
+
+Verified at **2026-11-25T02:17:31+00:00**:
+
+| Check actually run | Result |
+|---|---|
+| `pytest tests/test_delivery.py tests/test_outbox.py tests/test_jobs.py tests/test_execution.py tests/test_repository.py` | 109 passed; the initial 105-case run also passed before four final boundary cases |
+| Full application pytest suite with `dev` + `engine` extras and JUnit | 305 passed, no failures/errors/skips; 68 core and 237 real-engine cases, including 27 delivery cases |
+| `pytest --collect-only -q -m engine` | Confirmed 237 real-engine cases without rerunning tests |
+| `ruff check .` and `ruff format --check .` | Passed; 37 files |
+| Final JUnit, documentation links/fences, selectors and `git diff --check` | Passed; 305 cases with no failures/errors/skips and 149 executable selectors |
+
+The user explicitly approved three total delivery attempts, waits of 5 and
+30 seconds, then operator review. Tests use an injected server clock, not sleep.
+Send watermarks commit before the local transport call; confirmation and worker
+assignment commit together only for the live attempt/current approved snapshot.
+Unconfirmed acceptance may duplicate buffered messages but known validation
+results are reused. Expired/unknown sends still count toward the same hard cap.
+Exhaustion and its immutable hold recover without a fourth send after write failure.
+
+All focused/full checks passed. No dependency manifests were changed or packages
+restored locally. Existing engine-marked network/model guards and explicit
+grading/approval prohibitions apply. The one queue-to-executor case runs actual
+pinned-engine read-only validation and verifies result reuse without reexecution.
+
+Raw JUnit remains at ignored `.local/test-results/pytest.xml`. Frontend, HTTP
+routes and authentication are unchanged; older local/hosted browser evidence
+remains historical, not a new run for this increment. `SimulatedQueue` is not
+durable message storage and no consumer, scheduler, real adapter, cloud resources
+or paid-stage retries are enabled. This increment is uncommitted and unpushed.
+
 ## Local foundation regression cases
 
 - [x] `tests/test_auth.py::test_valid_delegated_token`: signed delegated token accepted.
@@ -445,10 +479,10 @@ remains uncommitted and unpushed pending separate review.
 
 1. Run the required commands above and inspect `git status --short`.
 2. Do not treat locally committed or untracked implementation as already published.
-3. Next bounded task: define a synthetic transport/retry contract before a queue
-  adapter; obtain explicit retry-cap/backoff decisions rather than assuming
-  unlimited delivery retries. Preserve pending-only immutable reconciliation
-  holds, five-minute per-attempt fencing, cancellation and immutable result reuse.
+3. Next bounded task: add a synthetic local consumer/coordinator contract and
+  explicit lifecycle/result inspection before any real queue adapter. Preserve
+  the approved three-attempt 5/30-second transport policy, separate five-minute
+  send/execution fences, immutable reconciliation holds and result reuse.
   A live duplicate cannot start execution; expiry may allow overlapping CPU
   validation but only the current live attempt can publish. Retry eligibility
   does not mean a scheduler/consumer exists. Do not connect real queues,
@@ -691,7 +725,9 @@ are explicitly non-paid; no automatic submission follows human approval.
 - [x] Local fenced/expiring execution claims, teacher cancellation and immutable
   read-only validation results; cases below.
 - [x] Local stale/invalid pending outbox reconciliation and immutable holds; cases below.
-- [ ] Real queue delivery, bounded transport retry policy and queue poison-message handling.
+- [x] Bounded simulated transport policy: three total attempts, 5/30-second waits,
+  durable unknown-send watermarks and terminal operator review; cases below.
+- [ ] Real queue delivery, consumer/scheduler and production queue poison-message handling.
 - [ ] Production worker authentication and separate control/artifact permissions,
   cloud job APIs/UI, approved paid budgets/stages and Foundry runtime execution.
 
@@ -755,5 +791,39 @@ Only protected control/index/hash/snapshot/checkpoint metadata is inspected;
 - [x] `tests/test_outbox.py::test_hold_insert_failure_rolls_back_without_changing_job_or_approval`.
 - [x] `tests/test_outbox.py::test_concurrent_reconciliation_records_only_one_immutable_hold`.
 - [x] `tests/test_outbox.py::test_rehashed_foreign_hold_cannot_replace_local_audit_scope`.
-- [ ] Real transport poison messages, retry caps/backoff, operator hold repair/release,
+- [ ] Real transport poison messages, operator hold repair/release,
   queue delivery/consumer, worker identity and production permission separation.
+
+## Bounded simulated delivery cases
+
+The approved policy is three attempts total, then operator review, with waits
+of 5 seconds and 30 seconds. Send claims reuse the five-minute server-owned
+default, separately from engine execution. Only the fixed offline stage is
+eligible. `SimulatedQueue` is intentionally an in-memory synthetic buffer;
+durable SQLite control watermarks are not durable queue-message storage.
+No background consumer/timer or real transport is enabled.
+
+- [x] `tests/test_delivery.py::test_confirmed_simulated_delivery_is_durable_and_replay_does_not_resend`:
+  preserved control records, same synthetic buffer, stable message/recipient,
+  unchanged human authority and confirmed worker grant without executing validation.
+- [x] `tests/test_delivery.py::test_retry_wait_is_server_owned_and_stable_nonce_does_not_increment`.
+- [x] `tests/test_delivery.py::test_three_unconfirmed_attempts_stop_in_immutable_operator_review`.
+- [x] `tests/test_delivery.py::test_duplicate_accepted_messages_share_one_job_and_reuse_validation_result`:
+  lost acknowledgement produces duplicate buffered messages; actual pinned-engine
+  validation runs once and the committed result is reused.
+- [x] `tests/test_delivery.py::test_crash_watermark_survives_expiry_and_replacement`.
+- [x] `tests/test_delivery.py::test_replaced_send_cannot_confirm_a_late_receipt`.
+- [x] `tests/test_delivery.py::test_delivery_scope_cannot_cross_roles_or_tenants`.
+- [x] `tests/test_delivery.py::test_retry_cannot_change_recipient_or_select_another_message`.
+- [x] `tests/test_delivery.py::test_snapshot_change_or_cancellation_during_send_prevents_assignment`.
+- [x] `tests/test_delivery.py::test_legacy_assignment_is_not_delivery_and_managed_assignment_cannot_bypass_send`.
+- [x] `tests/test_delivery.py::test_already_assigned_legacy_job_is_not_automatically_sent`.
+- [x] `tests/test_delivery.py::test_confirmation_and_assignment_rollback_together`.
+- [x] `tests/test_delivery.py::test_concurrent_dispatchers_do_not_issue_two_live_sends`.
+- [x] `tests/test_delivery.py::test_rehashed_delivery_stage_corruption_fails_closed`.
+- [x] `tests/test_delivery.py::test_three_expired_unknown_send_attempts_cannot_issue_a_fourth`.
+- [x] `tests/test_delivery.py::test_exhaustion_hold_failure_preserves_attempt_limit_and_recovers`.
+- [x] `tests/test_delivery.py::test_expiry_at_confirmation_boundary_cannot_grant_worker_read_access`.
+- [x] `tests/test_delivery.py::test_delivery_history_is_visible_only_to_its_tenant_dispatcher`.
+- [ ] Durable queue storage, actual consumer delivery/visibility/poison handling,
+  dispatcher service identity, operator hold-release policy and paid-stage retry rules.
