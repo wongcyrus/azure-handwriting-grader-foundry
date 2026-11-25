@@ -72,3 +72,28 @@ export interface ExamList {
   exams: { id: string; title: string; state: string; version: number }[];
   next_cursor: string | null;
 }
+
+export interface OfflineJob {
+  job_id: string;
+  exam_version: number;
+  source_exam_version: number;
+  state: string;
+  current_job_scope: boolean;
+  result_available: boolean;
+}
+
+export interface OfflineJobList {
+  items: OfflineJob[];
+  next_cursor: string | null;
+  exam_version: number;
+}
+
+export interface OfflineResult {
+  validated_at: string;
+  summary: {
+    students: number;
+    absent: number;
+    pdf_pages: number;
+    total_marks: number;
+  };
+}

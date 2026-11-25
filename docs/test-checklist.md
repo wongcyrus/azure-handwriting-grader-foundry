@@ -16,10 +16,12 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
   approval, not pushed. Outbox reconciliation is committed locally as `9631574`,
   also not pushed. Simulated delivery is committed locally as `cd6795f`, also
   not pushed. Consumer/lifecycle is committed locally as `48f3336`, not pushed.
-  New teacher job HTTP code and this handoff remain uncommitted
+  Teacher job HTTP is committed locally as `1411719`, not pushed.
+  New teacher job UI code and this handoff remain uncommitted
   pending review; further commit/publication is not authorized.
 - A fresh GitHub clone contains the application through `9316676`, not the newer
-  local execution/reconciliation/delivery/consumer increments. Continue in this worktree for those.
+  local execution/reconciliation/delivery/consumer/HTTP increments or uncommitted
+  job UI. Continue in this worktree for those.
 - Engine pin: `3b155f9232cb0730587d89677c932ea049dd7f71`.
 - New cloud dependencies belong here, not in the engine's default installation.
 - No Azure resources, paid inference, email or real student uploads authorized.
@@ -41,7 +43,8 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | Local outbox reconciliation | Trusted dispatcher tenant-scoped cursor inspection, immutable stale/invalid holds, idempotent/race-safe pending cleanup; no actual transport or automatic repair |
 | Simulated delivery | Durable fenced send watermarks, stable recipient/message, three attempts with 5/30-second waits and exhaustion review; no real queue, background consumer or scheduler |
 | Offline coordinator | One-shot strict-envelope/confirmed-delivery consumption and owner-only lifecycle/historical result inspection; no background consumer or paid work |
-| Teacher offline job HTTP | Confirmed mapped-input preparation/request/cancellation, owner-indexed bounded listing and lifecycle/historical results; current exam ETags, no worker execution route or browser job UI |
+| Teacher offline job HTTP | Confirmed mapped-input preparation/request/cancellation, owner-indexed bounded listing and lifecycle/historical results; current exam ETags, no worker execution route |
+| Teacher offline job UI | Explicit consent, stable request replay, manual bounded list/status/result reads, historical summaries, confirmed cancellation and reload preserving edits until explicit discard; synthetic only |
 | Attendance | Optional complete CSV upload, status preview and independent teacher attestation; production acceptance pending |
 | Region review | First-present-script JPEG template, actual pixel dimensions, validated drafts and separate geometry attestation |
 | Local teacher canvas | React/TypeScript pointer/keyboard editing, CSS/zoom/DPR conversion, page review, approval and explicit conflict recovery |
@@ -477,6 +480,44 @@ The preceding coordinator increment was committed after explicit approval as
 review. Next bounded work is the teacher job UI, not worker HTTP execution,
 production queues or paid-stage admission.
 
+### Teacher offline job UI verification
+
+Verified at **2026-11-25T02:54:37+00:00**:
+
+| Check actually run | Result |
+|---|---|
+| `npm run test:browser -- jobs.spec.ts` | Eight focused real Chrome/API cases passed across DPR 1/2 |
+| `npm run build` | Strict TypeScript and production asset build passed |
+| `npm run check` | TypeScript and Prettier passed |
+| `npm test` | Six geometry cases passed |
+| `npm run test:browser` | All 34 real Chrome/API cases passed, including eight new job cases |
+| Browser JUnit and helper shutdown | 34 cases, no failures/errors/skips; ports 18765/18766 closed |
+| Documentation links/fences/selectors and `git diff --check` | Passed; 177 existing executable Python selectors plus four named new browser workflows |
+
+The initial focused eight-case run passed its assertions but exposed duplicate
+React-key console diagnostics when both input and job panels were present.
+The job key now has an `offline:` namespace, and new browser cases reject
+recurrence of that diagnostic. The final full 34-case run passed cleanly;
+the initial diagnostics are not presented as a clean final verification.
+
+Only frontend sources/tests and handoff documentation changed. No Python API,
+dependency manifest, transport policy or workflow changed. The previous full
+377-case Python result above remains historical, not a new run for this UI-only
+increment. The existing workflow automatically discovers these browser tests;
+hosted evidence still belongs only to `9316676`.
+
+The browser fixture performs one explicit internal offline validation to produce
+an actual historical result; Azure client construction, network connections,
+engine approvals and grading are prohibited in that fixture. This does not
+install/start a general worker, implement production identity or grant teacher
+HTTP execution authority. All data is synthetic. No paid calls, deployment,
+real student data, dependency restoration or push occurred.
+
+The preceding teacher HTTP increment was committed after explicit approval as
+`1411719`, not pushed. The new teacher UI and handoff remain uncommitted pending
+review. Local controls are not school/production acceptance; the next operator
+entrypoint needs an explicit bounded identity/scope decision.
+
 ## Local foundation regression cases
 
 - [x] `tests/test_auth.py::test_valid_delegated_token`: signed delegated token accepted.
@@ -561,9 +602,10 @@ production queues or paid-stage admission.
 
 1. Run the required commands above and inspect `git status --short`.
 2. Do not treat locally committed or untracked implementation as already published.
-3. Next bounded task: teacher-owned offline job UI using the verified HTTP
-  preparation/request/list/lifecycle/result/cancellation routes, with explicit
-  confirmation and current-version conflict handling; no worker
+3. Next bounded task: an explicitly bounded local offline operator entrypoint
+  connecting existing reconciliation/delivery/one-shot validation components.
+  Agree its trusted synthetic dispatcher/worker identity and one-shot scope
+  before implementation; never turn teacher HTTP into worker authority. No worker
   HTTP authentication or paid-stage admission should be inferred. Preserve
   the approved three-attempt 5/30-second transport policy, separate five-minute
   send/execution fences, immutable reconciliation holds and result reuse.
@@ -939,7 +981,8 @@ background queue loop or real transport is added.
 - [x] `tests/test_coordinator.py::test_owner_can_inspect_expired_unknown_send_without_triggering_a_retry`.
 - [x] `tests/test_coordinator.py::test_consumer_validates_protected_delivery_record_not_just_envelope`.
 - [x] Owner HTTP job integration; verified cases below.
-- [ ] Real queue durable acknowledgement/visibility recovery, owner job UI,
+- [x] Synthetic owner job UI; verified cases below.
+- [ ] Real queue durable acknowledgement/visibility recovery,
   production worker service identity and all paid/grading workflows.
 
 ## Teacher offline job HTTP cases
@@ -961,5 +1004,30 @@ background queue loop or real transport is added.
 - [x] `tests/test_job_api.py::test_no_worker_execution_or_paid_http_routes_were_added`.
 - [x] Live HTTP smoke with `--regions --offline-jobs` and
   `--attendance --regions --offline-jobs`, synthetic only; flag requires regions.
-- [ ] Browser job UX, real queue/worker identity, production quotas/retention/
+- [x] Synthetic browser job UX; verified cases below.
+- [ ] Real queue/worker identity, production quotas/retention/
   parser isolation, paid admission and deployed acceptance.
+
+## Teacher offline job UI cases
+
+- [x] `apps/web/tests/jobs.spec.ts`: eight real Chrome/API cases across DPR 1/2,
+  with real native files and saved synthetic approvals, not fabricated results.
+- [x] `offline check needs explicit consent and cancellation never changes approvals`:
+  no job POST on load/refresh, unchecked consent blocks submission, success
+  clears consent, decline sends no cancellation, confirmed cancellation preserves
+  exam history and disconnect clears panel/token state.
+- [x] `lost offline request response retries the same protected job identity`:
+  server commits before the browser response is dropped; explicit refresh finds
+  the job and retry reuses the exact checkpoint/request body, producing one job.
+- [x] `offline refresh preserves unsaved boxes and stale cancellation requires explicit reload`:
+  reads retain local coordinates, stale/unsaved mutation controls are blocked,
+  declining reload retains edits, confirmed reload adopts the current ETag,
+  and cancellation preserves the changed exam/history.
+- [x] `offline paging and actual historical validation stay observational`:
+  21 jobs cross the 20-item page boundary without duplication; one result is
+  produced by explicit trusted synthetic dispatcher/worker control code under
+  network/client/approval/grading prohibitions. Historical summaries are labelled,
+  cannot be cancelled/treated as scores, and reads preserve current exam state.
+- [x] Duplicate React-key regression guard; input/job panel identities are distinct.
+- [ ] Production sign-in/school UX, browser accessibility evaluation, real queue/
+  operator/runtime identities and paid grading workflows.

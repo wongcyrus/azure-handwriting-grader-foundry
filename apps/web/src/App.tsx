@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent, KeyboardEvent, PointerEvent } from "react";
 import { ApiError, request } from "./api";
 import { InputSetup } from "./InputSetup";
+import { OfflineJobs } from "./OfflineJobs";
 import { drawnBox, imagePoint, movedBox, validBox } from "./geometry";
 import type { Point } from "./geometry";
 import type { Box, Draft, Exam, ExamList } from "./types";
@@ -773,6 +774,19 @@ export function App() {
                 </button>
               </aside>
             </section>
+          )}
+          {snapshot && (
+            <OfflineJobs
+              key={`offline:${exam.id}:${exam.version}`}
+              exam={exam}
+              etag={snapshot.etag}
+              token={token}
+              busy={busy}
+              unsaved={dirty || inputDirty}
+              onBusy={setBusy}
+              onAdopt={adopt}
+              onError={setError}
+            />
           )}
         </>
       )}

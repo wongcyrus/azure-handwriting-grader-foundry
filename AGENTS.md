@@ -16,7 +16,8 @@ the previous agent's chat or session todo database is not required.
   is committed locally as `8152657`, not pushed. Outbox reconciliation is
   committed locally as `9631574`, also not pushed. Simulated delivery is committed
   locally as `cd6795f`, also not pushed. Consumer/lifecycle is committed locally
-  as `48f3336`, not pushed. New teacher job HTTP changes still need separate
+  as `48f3336`, not pushed. Teacher job HTTP is committed locally as `1411719`,
+  not pushed. New teacher job UI changes still need separate
   review/commit/publication approval.
 - No Azure deployment, paid inference, real student data or email without the
   relevant explicit approvals.
@@ -101,6 +102,14 @@ the previous agent's chat or session todo database is not required.
   Keep roots server-controlled; preparation removes only its newly created
   private directory after checkpoint persistence. Do not expose worker execution
   or body-selected stage/recipient/path authority through these routes.
+- `OfflineJobs` is the synthetic teacher browser panel, not an execution client.
+  Explicit consent, saved approvals and no unsaved edits precede preparation/
+  admission. Preserve the same checkpoint/request UUID after an unknown job
+  response; no automatic retry/polling. Reads never adopt over local edits.
+  Version conflicts require explicit reload; discarding edits and cancellation
+  require confirmation. Keep historical summaries distinct from current
+  authority/awarded scores. Namespace component keys so input and job panels
+  cannot share identity across exam/version changes. Tokens remain memory-only.
 
 ## Validation and handoff
 

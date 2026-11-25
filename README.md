@@ -15,7 +15,8 @@ execution/cancellation is committed locally as `8152657`, not pushed.
 Outbox reconciliation is committed locally as `9631574`, also not pushed.
 Bounded simulated delivery is committed locally as `cd6795f`, also not pushed.
 One-shot offline consumption/lifecycle is committed locally as `48f3336`, not pushed.
-The new teacher-owned offline job HTTP increment remains uncommitted pending review.
+Teacher-owned offline job HTTP access is committed locally as `1411719`, not pushed.
+The new teacher offline job UI remains uncommitted pending review.
 
 ## Implementation status
 
@@ -53,6 +54,8 @@ The current increment implements durable **local input/region review and offline
   confirmed scoped delivery, strict envelopes, fenced result reuse and explicit historical states.
 - Confirmed teacher-owned offline preparation/request/cancellation HTTP routes,
   bounded job discovery and read-only lifecycle/historical result access.
+- Browser offline check controls with explicit consent, stable unknown-response
+  replay, manual status refresh/paging, historical summaries and stale-safe cancellation.
 
 **Not implemented:** production Blob/Queue adapters, all-script orientation/sequence review,
 production sign-in, direct roster/rubric/score editors, pricing and budget gates, grading jobs,
@@ -333,7 +336,7 @@ owner may inspect that original result, but it cannot approve the new inputs
 or grant grading. Live duplicates cannot bypass execution claims; expired
 read-only validation can be replaced under the existing separate execution policy.
 The three-send transport cap does not grant paid-call retries. Real queue
-storage/consumer recovery, production identities, teacher job UI and all
+storage/consumer recovery, production identities and all
 paid/grading stages remain pending.
 
 ### Teacher-owned offline job HTTP access
@@ -360,7 +363,26 @@ is `offline-workspaces` beside the SQLite database, with `inputs` and `validatio
 subdirectories; trusted `create_app(..., workspace_root=...)` callers may override
 it. Preparation persists immutable checkpoint references and removes only its
 new private workspace directory. HTTP bodies cannot select paths, stages or
-workers. No dispatch/consume/run/grading endpoint or browser job UI is included.
+workers. No dispatch/consume/run/grading endpoint is included.
+
+The browser's **Offline input checks** panel requires explicit confirmation and
+saved region approval before preparing/requesting a check. A lost job response
+keeps the same checkpoint/request UUID for the **Retry same offline request**
+action; refreshing first can reveal whether the original request was accepted.
+Successful submission clears confirmation. There is no automatic retry or polling.
+
+**Refresh offline checks** and **More offline checks** read bounded owned pages.
+**Inspect check** shows the observed lifecycle and any committed summary;
+historical results explicitly describe old inputs, not awarded scores or current
+approval. Cancellation requires a separate confirmation. Unsaved edits block
+requests/cancellation, while reads preserve those edits. If the exam changes,
+explicit reload adopts the current ETag; discarding unsaved edits needs confirmation.
+Disconnect removes panel state and the memory-only token.
+
+The local demo still has no running worker: a requested job remains pending
+until separately trusted internal offline execution occurs. Browser tests produce
+one real result through explicit synthetic dispatcher/worker fixtures, with
+network, Azure client, engine approval and grading actions prohibited.
 
 ## Local setup and tests
 
