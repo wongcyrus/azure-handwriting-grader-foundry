@@ -117,6 +117,8 @@ class OfflineJobCoordinator:
         self.control.repository.assert_version(exam_id, observed["version"])
         return {
             "job_id": job_id,
+            "exam_version": observed["version"],
+            "source_exam_version": job["intent"]["binding"]["exam_version"],
             "message_id": job["intent"]["message_id"],
             "stage": OFFLINE_STAGE,
             "state": state,
@@ -127,6 +129,27 @@ class OfflineJobCoordinator:
             "result_available": result_available,
             "result_sha256": execution.get("result_sha256"),
             "outbox_hold": job["outbox_hold"],
+        }
+
+    def owned_jobs(
+        self, principal: Principal, exam_id: str, limit: int = 20, cursor: UUID | None = None
+    ) -> dict:
+        observed = self.control.bridge.service.owned(principal, exam_id)
+        if type(limit) is not int or not 1 <= limit <= 50:
+            raise ApplicationError("INVALID_LIMIT", "Use a job limit from 1 to 50.")
+        try:
+            after = "" if cursor is None else str(UUID(str(cursor)))
+        except (ValueError, TypeError, AttributeError) as error:
+            raise ApplicationError("INVALID_CURSOR", "Use an opaque UUID job cursor.") from error
+        page = self.control.jobs.owned_ids(
+            exam_id, principal.tenant_id, principal.object_id, limit, after
+        )
+        items = [self.owned_status(principal, exam_id, job_id) for job_id in page["job_ids"]]
+        self.control.repository.assert_version(exam_id, observed["version"])
+        return {
+            "items": items,
+            "next_cursor": page["next_cursor"],
+            "exam_version": observed["version"],
         }
 
     def owned_result(self, principal: Principal, exam_id: str, job_id: str) -> dict:

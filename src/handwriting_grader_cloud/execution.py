@@ -123,10 +123,14 @@ class OfflineValidationExecutor:
                 )
             self._save(connection, context["job_id"], {**execution, "state": "RUNNING"})
 
-    def cancel(self, principal: Principal, exam_id: str, job_id: str) -> dict:
+    def cancel(
+        self, principal: Principal, exam_id: str, job_id: str, *, expected: int | None = None
+    ) -> dict:
         self.control.owned_job(principal, exam_id, job_id)
         with self.repository.connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            if expected is not None:
+                self.repository._assert_version(connection, exam_id, expected)
             job = self.control.jobs._decode(
                 self.control.jobs._select(connection, "j.id=?", (job_id,))
             )

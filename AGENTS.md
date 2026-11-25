@@ -15,8 +15,9 @@ the previous agent's chat or session todo database is not required.
   through `9316676`, with successful hosted offline CI. Fenced offline execution
   is committed locally as `8152657`, not pushed. Outbox reconciliation is
   committed locally as `9631574`, also not pushed. Simulated delivery is committed
-  locally as `cd6795f`, also not pushed. New consumer/lifecycle changes still need
-  separate review/commit/publication approval.
+  locally as `cd6795f`, also not pushed. Consumer/lifecycle is committed locally
+  as `48f3336`, not pushed. New teacher job HTTP changes still need separate
+  review/commit/publication approval.
 - No Azure deployment, paid inference, real student data or email without the
   relevant explicit approvals.
 - Local development is localhost-only and synthetic-data-only. SQLite is not the
@@ -80,7 +81,7 @@ the previous agent's chat or session todo database is not required.
   Unknown send outcomes may duplicate messages but cannot invent confirmation;
   terminal exhaustion creates an immutable `DELIVERY_REVIEW` hold.
   Never bypass managed delivery through the legacy acknowledgement API.
-  `SimulatedQueue` is not durable storage. No consumer, scheduler, real queue
+  `SimulatedQueue` is not durable storage. No background consumer, scheduler, real queue
   client, production dispatcher identity or new HTTP permission is implemented.
 - `OfflineJobCoordinator` is one-shot internal consumption, not a background
   queue/ack loop. Require a strict opaque envelope, the actual authenticated
@@ -91,6 +92,15 @@ the previous agent's chat or session todo database is not required.
   Recheck the observed exam version and validate result hashes before showing
   success; distinguish historical validation after edits from current authority.
   Preserve separate send/execution fencing and immutable result reuse.
+- Teacher HTTP job actions require current owner/tenant Teacher authority.
+  Preparation/admission/cancellation need literal confirmation and quoted exam
+  ETags; cancellation rechecks the current version inside its transaction even
+  for stale jobs. Listing is bounded and index-scoped; GETs never dispatch,
+  consume or approve. Historical results are evidence, not current authority.
+  App startup initializes internal job tables/components without starting work.
+  Keep roots server-controlled; preparation removes only its newly created
+  private directory after checkpoint persistence. Do not expose worker execution
+  or body-selected stage/recipient/path authority through these routes.
 
 ## Validation and handoff
 

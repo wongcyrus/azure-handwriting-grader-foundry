@@ -58,6 +58,8 @@ class JobRepository:
                     worker_id TEXT,
                     dispatched_at TEXT
                 );
+                CREATE INDEX IF NOT EXISTS offline_jobs_owner
+                    ON offline_validation_jobs (exam_id, tenant_id, owner_id, id);
                 CREATE TABLE IF NOT EXISTS offline_job_execution (
                     job_id TEXT PRIMARY KEY REFERENCES offline_validation_jobs(id),
                     document TEXT NOT NULL
@@ -231,6 +233,21 @@ class JobRepository:
                 (tenant_id, limit),
             ).fetchall()
         return [{"job_id": job_id, "message_id": message_id} for job_id, message_id in rows]
+
+    def owned_ids(
+        self, exam_id: str, tenant_id: str, owner_id: str, limit: int, after: str
+    ) -> dict:
+        with self.repository.connection() as connection:
+            rows = connection.execute(
+                "SELECT id FROM offline_validation_jobs "
+                "WHERE exam_id=? AND tenant_id=? AND owner_id=? AND id>? "
+                "ORDER BY id LIMIT ?",
+                (exam_id, tenant_id, owner_id, after, limit + 1),
+            ).fetchall()
+        return {
+            "job_ids": [row[0] for row in rows[:limit]],
+            "next_cursor": rows[limit - 1][0] if len(rows) > limit else None,
+        }
 
     def acknowledge(self, job: dict, worker_id: str, dispatched_at: str) -> dict:
         intent = job["intent"]

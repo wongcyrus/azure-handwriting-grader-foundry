@@ -54,3 +54,7 @@ class OfflineValidationRequest(StrictModel):
     checkpoint_id: UUID
     request_id: UUID
     confirmed: StrictBool
+
+
+class OfflineActionConfirmation(StrictModel):
+    confirmed: StrictBool

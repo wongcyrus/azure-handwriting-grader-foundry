@@ -15,7 +15,8 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 - Fenced execution/cancellation is committed locally as `8152657` after explicit
   approval, not pushed. Outbox reconciliation is committed locally as `9631574`,
   also not pushed. Simulated delivery is committed locally as `cd6795f`, also
-  not pushed. New consumer/lifecycle code and this handoff remain uncommitted
+  not pushed. Consumer/lifecycle is committed locally as `48f3336`, not pushed.
+  New teacher job HTTP code and this handoff remain uncommitted
   pending review; further commit/publication is not authorized.
 - A fresh GitHub clone contains the application through `9316676`, not the newer
   local execution/reconciliation/delivery/consumer increments. Continue in this worktree for those.
@@ -38,8 +39,9 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | Offline validation intents/outbox | Explicit confirmed owner requests, immutable idempotent intent + atomic outbox, trusted dispatcher assignment and scoped worker reads; no queue or paid stage |
 | Offline validation execution | Internal read-only pinned-engine checks, five-minute per-attempt fenced claims, stale-safe teacher cancellation and immutable/reused results; no scheduler, HTTP worker auth or paid stage |
 | Local outbox reconciliation | Trusted dispatcher tenant-scoped cursor inspection, immutable stale/invalid holds, idempotent/race-safe pending cleanup; no actual transport or automatic repair |
-| Simulated delivery | Durable fenced send watermarks, stable recipient/message, three attempts with 5/30-second waits and exhaustion review; no real queue, consumer or scheduler |
-| Offline coordinator | One-shot strict-envelope/confirmed-delivery consumption and owner-only lifecycle/historical result inspection; no background consumer, HTTP routes or paid work |
+| Simulated delivery | Durable fenced send watermarks, stable recipient/message, three attempts with 5/30-second waits and exhaustion review; no real queue, background consumer or scheduler |
+| Offline coordinator | One-shot strict-envelope/confirmed-delivery consumption and owner-only lifecycle/historical result inspection; no background consumer or paid work |
+| Teacher offline job HTTP | Confirmed mapped-input preparation/request/cancellation, owner-indexed bounded listing and lifecycle/historical results; current exam ETags, no worker execution route or browser job UI |
 | Attendance | Optional complete CSV upload, status preview and independent teacher attestation; production acceptance pending |
 | Region review | First-present-script JPEG template, actual pixel dimensions, validated drafts and separate geometry attestation |
 | Local teacher canvas | React/TypeScript pointer/keyboard editing, CSS/zoom/DPR conversion, page review, approval and explicit conflict recovery |
@@ -69,6 +71,8 @@ uv run --frozen --extra dev --extra engine python tools/smoke_review.py
 uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance
 uv run --frozen --extra dev --extra engine python tools/smoke_review.py --regions
 uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance --regions
+uv run --frozen --extra dev --extra engine python tools/smoke_review.py --regions --offline-jobs
+uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance --regions --offline-jobs
 ```
 
 Frontend commands from `apps/web` (own reviewed manifest/lockfile):
@@ -109,6 +113,7 @@ uv run --frozen --extra dev --extra engine pytest tests/test_execution.py tests/
 uv run --frozen --extra dev --extra engine pytest tests/test_outbox.py tests/test_jobs.py tests/test_execution.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_delivery.py tests/test_outbox.py tests/test_jobs.py tests/test_execution.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_coordinator.py tests/test_delivery.py tests/test_outbox.py tests/test_jobs.py tests/test_execution.py tests/test_repository.py
+uv run --frozen --extra dev --extra engine pytest tests/test_job_api.py tests/test_api.py tests/test_auth.py tests/test_repository.py tests/test_coordinator.py tests/test_execution.py
 uv run --frozen --extra dev --extra engine pytest tests/test_api.py tests/test_auth.py tests/test_repository.py
 ```
 
@@ -429,6 +434,49 @@ The coordinator is internal one-shot code, not production queue polling,
 durable acknowledgements, service identity or paid execution. New code/tests
 and this handoff await review; nothing in this increment was committed/pushed.
 
+### Teacher-owned offline job HTTP verification
+
+Verified at **2026-11-25T02:47:33+00:00**:
+
+| Check actually run | Result |
+|---|---|
+| `pytest tests/test_job_api.py tests/test_api.py tests/test_auth.py tests/test_repository.py tests/test_coordinator.py tests/test_execution.py` | 147 passed |
+| Full application pytest suite with `dev` + `engine` extras and JUnit | 377 passed, no failures/errors/skips; 68 core and 309 real-engine cases, including 40 new job HTTP cases |
+| `pytest --collect-only -q -m engine` | Confirmed 309 real-engine cases without rerunning tests |
+| `ruff check .` and `ruff format --check .` | Passed; 40 files |
+| `python tools/smoke_review.py` | Passed; existing live authenticated synthetic input flow |
+| `python tools/smoke_review.py --regions --offline-jobs` | Passed; no-CSV preparation/replay/list/status/pending-result rejection and stale-safe cancellation |
+| `python tools/smoke_review.py --attendance --regions --offline-jobs` | Passed; same job flow with explicit CSV/three retained attestations |
+| `actionlint .github/workflows/validate.yml` | Passed using the existing reviewed cached actionlint 1.7.12 binary |
+| Final JUnit, documentation links/fences, selectors and `git diff --check` | Passed; 377 clean cases and 177 executable selectors |
+
+Initial focused lint stopped before pytest because of one unsorted test import
+block. Ruff fixed it; all 147 focused cases subsequently passed. `actionlint`
+was not on PATH, so the already reviewed session-cached binary was invoked by
+absolute path; no tool was installed or dependency restored. No stopped command
+is reported as a pass.
+
+HTTP preparation removes only its new private directory after persisting the
+mapped checkpoint, and returns no path. Mutations require literal confirmation
+and quoted current exam ETags. Cancellation rechecks the current version under
+its write transaction independently of the old job binding. Listing uses a
+protected owner/tenant/exam index and bounded UUID paging. Results are actual
+internally produced pinned-engine evidence; owner GETs never execute work and
+historical evidence cannot authorize new inputs.
+
+Application startup now initializes internal job tables/control components but
+starts no delivery, consumer or worker. The workflow's combined smoke command
+now covers job HTTP access; hosted evidence still belongs only to `9316676`.
+Frontend sources were not changed or rerun; previous browser/geometry results
+remain historical. All live smoke servers cleanly stopped and their temporary
+synthetic data was removed. No paid/model calls, engine approval actions,
+grading, cloud deployment, real student records or push occurred.
+
+The preceding coordinator increment was committed after explicit approval as
+`48f3336`, not pushed. This HTTP increment and handoff remain uncommitted pending
+review. Next bounded work is the teacher job UI, not worker HTTP execution,
+production queues or paid-stage admission.
+
 ## Local foundation regression cases
 
 - [x] `tests/test_auth.py::test_valid_delegated_token`: signed delegated token accepted.
@@ -513,8 +561,9 @@ and this handoff await review; nothing in this increment was committed/pushed.
 
 1. Run the required commands above and inspect `git status --short`.
 2. Do not treat locally committed or untracked implementation as already published.
-3. Next bounded task: expose teacher-owned offline job/lifecycle/result HTTP
-  integration with explicit confirmation and current-version checks; no worker
+3. Next bounded task: teacher-owned offline job UI using the verified HTTP
+  preparation/request/list/lifecycle/result/cancellation routes, with explicit
+  confirmation and current-version conflict handling; no worker
   HTTP authentication or paid-stage admission should be inferred. Preserve
   the approved three-attempt 5/30-second transport policy, separate five-minute
   send/execution fences, immutable reconciliation holds and result reuse.
@@ -889,5 +938,28 @@ background queue loop or real transport is added.
 - [x] `tests/test_coordinator.py::test_consumer_cannot_bypass_another_live_execution_claim`.
 - [x] `tests/test_coordinator.py::test_owner_can_inspect_expired_unknown_send_without_triggering_a_retry`.
 - [x] `tests/test_coordinator.py::test_consumer_validates_protected_delivery_record_not_just_envelope`.
-- [ ] Real queue durable acknowledgement/visibility recovery, owner HTTP job/UI
-  integration, production worker service identity and all paid/grading workflows.
+- [x] Owner HTTP job integration; verified cases below.
+- [ ] Real queue durable acknowledgement/visibility recovery, owner job UI,
+  production worker service identity and all paid/grading workflows.
+
+## Teacher offline job HTTP cases
+
+- [x] `tests/test_job_api.py::test_teacher_http_job_setup_replay_discovery_and_inspection_do_not_execute`:
+  checkpoint-only preparation response, private-directory cleanup, stable replay,
+  bounded discovery, pending result conflict and unchanged human authority.
+- [x] `tests/test_job_api.py::test_all_job_http_routes_remain_owner_teacher_scoped`.
+- [x] `tests/test_job_api.py::test_offline_http_mutations_require_literal_confirmation`.
+- [x] `tests/test_job_api.py::test_offline_http_mutations_require_current_quoted_etag`.
+- [x] `tests/test_job_api.py::test_offline_http_bodies_cannot_select_stage_recipient_or_paths`.
+- [x] `tests/test_job_api.py::test_stale_offline_job_can_be_cancelled_with_current_exam_etag`.
+- [x] `tests/test_job_api.py::test_cancellation_rechecks_etag_inside_its_write_transaction`.
+- [x] `tests/test_job_api.py::test_job_and_checkpoint_ids_do_not_cross_owned_exam_boundaries`.
+- [x] `tests/test_job_api.py::test_owned_job_paging_and_query_validation`.
+- [x] `tests/test_job_api.py::test_verified_and_historical_results_are_readable_without_http_execution`:
+  actual internal simulated delivery and pinned-engine validation; HTTP only reads.
+- [x] `tests/test_job_api.py::test_owner_job_routes_recover_after_api_repository_replacement`.
+- [x] `tests/test_job_api.py::test_no_worker_execution_or_paid_http_routes_were_added`.
+- [x] Live HTTP smoke with `--regions --offline-jobs` and
+  `--attendance --regions --offline-jobs`, synthetic only; flag requires regions.
+- [ ] Browser job UX, real queue/worker identity, production quotas/retention/
+  parser isolation, paid admission and deployed acceptance.

@@ -14,7 +14,8 @@ intents/outbox. Hosted offline CI passed for that commit. Fenced offline
 execution/cancellation is committed locally as `8152657`, not pushed.
 Outbox reconciliation is committed locally as `9631574`, also not pushed.
 Bounded simulated delivery is committed locally as `cd6795f`, also not pushed.
-The new offline consumer/lifecycle increment remains uncommitted pending review.
+One-shot offline consumption/lifecycle is committed locally as `48f3336`, not pushed.
+The new teacher-owned offline job HTTP increment remains uncommitted pending review.
 
 ## Implementation status
 
@@ -50,6 +51,8 @@ The current increment implements durable **local input/region review and offline
   retry waits, lost-acknowledgement recovery and terminal operator-review holds.
 - One-shot offline consumption and owner-only lifecycle/result inspection:
   confirmed scoped delivery, strict envelopes, fenced result reuse and explicit historical states.
+- Confirmed teacher-owned offline preparation/request/cancellation HTTP routes,
+  bounded job discovery and read-only lifecycle/historical result access.
 
 **Not implemented:** production Blob/Queue adapters, all-script orientation/sequence review,
 production sign-in, direct roster/rubric/score editors, pricing and budget gates, grading jobs,
@@ -63,8 +66,9 @@ Do not expose this starter server publicly or upload real student records.
 
 ### Offline review workspace bridge
 
-`WorkspaceBridge` is internal API/control code, not a new HTTP route or worker
-permission. It requires the authenticated owner's Teacher principal, current
+`WorkspaceBridge` is server-side API/control code, not a worker permission.
+Its confirmed owner-only preparation is exposed below; hydration/recovery remain
+internal. It requires the authenticated owner's Teacher principal, current
 exam version and current input/region attestations, with a separate attendance
 attestation for explicit CSV. It reruns pinned-engine validation and rejects
 stale approvals, changed files or incompatible checkpoint provenance.
@@ -151,7 +155,8 @@ the recipient is rejected. Assigned workers can read only the matching
 job/message context and referenced, hash-checked artifacts while the approved
 snapshot remains current.
 
-Admission and dispatch are **internal local control records, not execution**.
+Admission creates **local control records, not execution**; teacher admission
+is also exposed through the confirmed HTTP route below. Dispatch remains internal.
 `DISPATCHED` means an acknowledgement was recorded; no queue message is sent and
 no validation or grading starts automatically. Read grants are not execution
 claims. No worker HTTP routes or production service-identity authentication
@@ -328,8 +333,34 @@ owner may inspect that original result, but it cannot approve the new inputs
 or grant grading. Live duplicates cannot bypass execution claims; expired
 read-only validation can be replaced under the existing separate execution policy.
 The three-send transport cap does not grant paid-call retries. Real queue
-storage/consumer recovery, production identities, HTTP job integration, teacher
-UI and all paid/grading stages remain pending.
+storage/consumer recovery, production identities, teacher job UI and all
+paid/grading stages remain pending.
+
+### Teacher-owned offline job HTTP access
+
+After current input/attendance/region approvals, explicitly prepare compatible
+inputs with `POST /api/exams/{id}/offline-inputs` and `{"confirmed": true}`.
+It returns only `checkpoint_id`, `checkpoint_sha256` and `exam_version`, never
+a filesystem destination. Request the non-paid check with
+`POST /api/exams/{id}/jobs`, supplying that `checkpoint_id`, a stable UUID
+`request_id` and `confirmed: true`. Identical replay returns the same job/message
+with HTTP 201. These actions do not change the exam version or approval history.
+
+Owned job listing accepts `limit` (1–50, default 20) and an optional UUID cursor.
+Lifecycle and result GETs never dispatch, consume or approve anything. Pending
+results return `RESULT_NOT_READY` (409); completed results are hash-checked and
+remain readable as historical evidence after input edits, not current approval.
+Cancellation requires `{"confirmed": true}` and the current quoted exam ETag,
+checked inside the cancellation write transaction even when the job is stale.
+All six routes enforce the existing owner/tenant Teacher boundary.
+
+Application startup now initializes internal job tables and control components,
+but starts no worker, polling or transport. The server-controlled default root
+is `offline-workspaces` beside the SQLite database, with `inputs` and `validation`
+subdirectories; trusted `create_app(..., workspace_root=...)` callers may override
+it. Preparation persists immutable checkpoint references and removes only its
+new private workspace directory. HTTP bodies cannot select paths, stages or
+workers. No dispatch/consume/run/grading endpoint or browser job UI is included.
 
 ## Local setup and tests
 
@@ -342,6 +373,7 @@ uv run --frozen --extra dev --extra engine python tools/smoke_review.py
 uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance
 uv run --frozen --extra dev --extra engine python tools/smoke_review.py --regions
 uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance --regions
+uv run --frozen --extra dev --extra engine python tools/smoke_review.py --attendance --regions --offline-jobs
 ```
 
 Run with an ephemeral development token that is never printed:
@@ -377,6 +409,12 @@ Actual tenant registration, deployment and live Entra testing remain pending.
 | Read owned template JPEG | `GET /api/exams/{id}/regions/pages/{index}` |
 | Save region draft | `PUT /api/exams/{id}/regions` |
 | Attest reviewed geometry | `POST /api/exams/{id}/regions/approvals` |
+| Explicitly prepare approved offline inputs | `POST /api/exams/{id}/offline-inputs` |
+| Confirm an offline validation request | `POST /api/exams/{id}/jobs` |
+| List owned offline jobs | `GET /api/exams/{id}/jobs?limit=20&cursor={optional-uuid}` |
+| Inspect job lifecycle | `GET /api/exams/{id}/jobs/{job}` |
+| Read committed validation result | `GET /api/exams/{id}/jobs/{job}/result` |
+| Confirm cancellation with current exam ETag | `POST /api/exams/{id}/jobs/{job}/cancel` |
 
 Mutations of an existing exam require its returned `If-Match` ETag, including quotes.
 Uploads use `application/octet-stream` and are limited to 10 MiB in this local increment.

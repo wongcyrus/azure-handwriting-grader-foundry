@@ -13,6 +13,7 @@ import urllib.error
 import urllib.request
 from io import BytesIO
 from pathlib import Path
+from uuid import uuid4
 
 from openpyxl import Workbook
 from pypdf import PdfWriter
@@ -58,7 +59,14 @@ def main():
     parser.add_argument(
         "--regions", action="store_true", help="Render and attest manual region review"
     )
+    parser.add_argument(
+        "--offline-jobs",
+        action="store_true",
+        help="Prepare, request, inspect and cancel an offline check",
+    )
     args = parser.parse_args()
+    if args.offline_jobs and not args.regions:
+        parser.error("--offline-jobs requires --regions.")
     with socket.socket() as candidate:
         candidate.bind(("127.0.0.1", 0))
         port = candidate.getsockname()[1]
@@ -210,9 +218,73 @@ def main():
                     assert exam["state"] == "REGIONS_REVIEWED"
                     assert len(exam["approvals"]) == (3 if args.attendance else 2)
                     assert exam["approvals"][-1]["id"] == exam["current_region_approval"]
+                if args.offline_jobs:
+                    prepared, prepared_etag = call(
+                        f"/api/exams/{exam_id}/offline-inputs",
+                        "POST",
+                        {"confirmed": True},
+                        etag,
+                    )
+                    assert prepared_etag == etag
+                    assert set(prepared) == {"checkpoint_id", "checkpoint_sha256", "exam_version"}
+                    request = {
+                        "checkpoint_id": prepared["checkpoint_id"],
+                        "request_id": str(uuid4()),
+                        "confirmed": True,
+                    }
+                    job, job_etag = call(f"/api/exams/{exam_id}/jobs", "POST", request, etag)
+                    assert job_etag == etag
+                    assert job["state"] == "PENDING_DISPATCH"
+                    replay, _ = call(f"/api/exams/{exam_id}/jobs", "POST", request, etag)
+                    assert replay == job
+                    job_id = job["intent"]["id"]
+                    page, _ = call(f"/api/exams/{exam_id}/jobs")
+                    assert [item["job_id"] for item in page["items"]] == [job_id]
+                    status, status_etag = call(f"/api/exams/{exam_id}/jobs/{job_id}")
+                    assert status["state"] == "PENDING_DISPATCH"
+                    assert status_etag == etag
+                    assert not status["result_available"]
+                    try:
+                        call(f"/api/exams/{exam_id}/jobs/{job_id}/result")
+                    except urllib.error.HTTPError as error:
+                        assert error.code == 409
+                        assert json.loads(error.read())["error"]["code"] == "RESULT_NOT_READY"
+                    else:
+                        raise AssertionError("A pending job returned a result.")
+                    unchanged, _ = call(f"/api/exams/{exam_id}")
+                    assert unchanged == exam
+                    changed, current_etag = call(
+                        f"/api/exams/{exam_id}/settings", "PUT", exam["settings"], etag
+                    )
+                    status, _ = call(f"/api/exams/{exam_id}/jobs/{job_id}")
+                    assert status["state"] == "STALE_INPUTS"
+                    try:
+                        call(
+                            f"/api/exams/{exam_id}/jobs/{job_id}/cancel",
+                            "POST",
+                            {"confirmed": True},
+                            etag,
+                        )
+                    except urllib.error.HTTPError as error:
+                        assert error.code == 409
+                    else:
+                        raise AssertionError("A stale ETag cancelled the job.")
+                    cancelled, _ = call(
+                        f"/api/exams/{exam_id}/jobs/{job_id}/cancel",
+                        "POST",
+                        {"confirmed": True},
+                        current_etag,
+                    )
+                    assert cancelled["state"] == "CANCELLED"
+                    status, _ = call(f"/api/exams/{exam_id}/jobs/{job_id}")
+                    assert status["state"] == "CANCELLED"
+                    final, _ = call(f"/api/exams/{exam_id}")
+                    assert final == changed
                 mode = "explicit attendance" if args.attendance else "all-roster default"
                 if args.regions:
                     mode += " and rendered region review"
+                if args.offline_jobs:
+                    mode += " and confirmed offline request/stale-safe cancellation"
                 print(
                     f"PASS: live localhost auth, synthetic files, {mode}, pinned-engine "
                     "preflight and hash-bound teacher attestation(s); no inference."

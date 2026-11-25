@@ -1,4 +1,6 @@
 import re
+import shutil
+from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
@@ -7,23 +9,40 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .auth import Authenticator, Principal
+from .coordinator import OfflineJobCoordinator
+from .delivery import OfflineDispatcher, SimulatedQueue
 from .errors import ApplicationError
+from .execution import OfflineValidationExecutor
+from .jobs import OfflineJobControl
 from .models import (
     ArtifactKind,
     CreateExam,
     ExamSettings,
+    OfflineActionConfirmation,
+    OfflineValidationRequest,
     RegionApproval,
     RegionDraft,
     ReviewApproval,
 )
 from .service import ExamService
+from .workspace import WorkspaceBridge
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
-def create_app(service: ExamService, authenticator: Authenticator) -> FastAPI:
+def create_app(
+    service: ExamService, authenticator: Authenticator, *, workspace_root: Path | None = None
+) -> FastAPI:
     app = FastAPI(title="Handwriting Foundry: initial review API", version="0.1.0")
     bearer = HTTPBearer(auto_error=False)
+    root = workspace_root or service.repository.path.parent / "offline-workspaces"
+    bridge = WorkspaceBridge(service, root / "inputs")
+    jobs = OfflineJobControl(bridge)
+    executor = OfflineValidationExecutor(jobs, root / "validation")
+    dispatcher = OfflineDispatcher(jobs, SimulatedQueue())
+    coordinator = OfflineJobCoordinator(jobs, dispatcher, executor)
+    app.state.offline_jobs = jobs
+    app.state.offline_coordinator = coordinator
 
     def principal(
         credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
@@ -61,6 +80,17 @@ def create_app(service: ExamService, authenticator: Authenticator) -> FastAPI:
 
     def result(document: dict) -> JSONResponse:
         return JSONResponse(document, headers={"ETag": f'"{document["version"]}"'})
+
+    def job_result(document: dict, exam_version: int, status_code: int = 200) -> JSONResponse:
+        return JSONResponse(
+            document, status_code=status_code, headers={"ETag": f'"{exam_version}"'}
+        )
+
+    def confirm_offline(request: OfflineActionConfirmation) -> None:
+        if request.confirmed is not True:
+            raise ApplicationError(
+                "REQUEST_REQUIRED", "Explicit offline action confirmation is required."
+            )
 
     @app.get("/health")
     def health():
@@ -141,5 +171,70 @@ def create_app(service: ExamService, authenticator: Authenticator) -> FastAPI:
     @app.post("/api/exams/{exam_id}/regions/approvals")
     def approve_regions(exam_id: UUID, request: RegionApproval, caller: teacher, expected: version):
         return result(service.approve_regions(caller, str(exam_id), expected, request))
+
+    @app.post("/api/exams/{exam_id}/offline-inputs")
+    def prepare_offline_inputs(
+        exam_id: UUID, request: OfflineActionConfirmation, caller: teacher, expected: version
+    ):
+        service.current(caller, str(exam_id), expected)
+        confirm_offline(request)
+        prepared = bridge.prepare_engine_inputs(caller, str(exam_id), expected)
+        try:
+            return job_result(
+                {
+                    "checkpoint_id": prepared.checkpoint_id,
+                    "checkpoint_sha256": prepared.manifest_sha256,
+                    "exam_version": expected,
+                },
+                expected,
+            )
+        finally:
+            shutil.rmtree(prepared.path)
+
+    @app.post("/api/exams/{exam_id}/jobs", status_code=201)
+    def request_offline_job(
+        exam_id: UUID, request: OfflineValidationRequest, caller: teacher, expected: version
+    ):
+        job = jobs.request_validation(caller, str(exam_id), expected, request)
+        return job_result(job, expected, 201)
+
+    @app.get("/api/exams/{exam_id}/jobs")
+    def list_offline_jobs(
+        exam_id: UUID,
+        caller: teacher,
+        limit: Annotated[int, Query(ge=1, le=50)] = 20,
+        cursor: UUID | None = None,
+    ):
+        page = coordinator.owned_jobs(caller, str(exam_id), limit, cursor)
+        return job_result(page, page["exam_version"])
+
+    @app.get("/api/exams/{exam_id}/jobs/{job_id}")
+    def get_offline_job(exam_id: UUID, job_id: UUID, caller: teacher):
+        document = coordinator.owned_status(caller, str(exam_id), str(job_id))
+        return job_result(document, document["exam_version"])
+
+    @app.get("/api/exams/{exam_id}/jobs/{job_id}/result")
+    def get_offline_result(exam_id: UUID, job_id: UUID, caller: teacher):
+        status = coordinator.owned_status(caller, str(exam_id), str(job_id))
+        if not status["result_available"]:
+            raise ApplicationError(
+                "RESULT_NOT_READY", "This offline check has no committed result.", 409
+            )
+        document = coordinator.owned_result(caller, str(exam_id), str(job_id))
+        service.repository.assert_version(str(exam_id), status["exam_version"])
+        return job_result(document, status["exam_version"])
+
+    @app.post("/api/exams/{exam_id}/jobs/{job_id}/cancel")
+    def cancel_offline_job(
+        exam_id: UUID,
+        job_id: UUID,
+        request: OfflineActionConfirmation,
+        caller: teacher,
+        expected: version,
+    ):
+        service.current(caller, str(exam_id), expected)
+        confirm_offline(request)
+        job = executor.cancel(caller, str(exam_id), str(job_id), expected=expected)
+        return job_result(job, expected)
 
     return app
