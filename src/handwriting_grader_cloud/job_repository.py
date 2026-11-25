@@ -9,6 +9,26 @@ def job_integrity_error() -> ApplicationError:
     return ApplicationError("JOB_INTEGRITY", "Offline job control data is inconsistent.", 409)
 
 
+def decode_hold(encoded, digest, job_id: str, message_id: str, tenant_id: str) -> dict | None:
+    if encoded is None and digest is None:
+        return None
+    try:
+        hold = json.loads(encoded)
+        if (
+            hashlib.sha256(encoded.encode()).hexdigest() != digest
+            or hold["schema_version"] != 1
+            or hold["job_id"] != job_id
+            or hold["message_id"] != message_id
+            or hold["tenant_id"] != tenant_id
+            or (hold["state"], hold["reason_code"])
+            not in (("STALE", "STALE_JOB"), ("QUARANTINED", "JOB_INTEGRITY"))
+        ):
+            raise job_integrity_error()
+        return hold
+    except (ValueError, TypeError, KeyError, AttributeError) as error:
+        raise job_integrity_error() from error
+
+
 class JobRepository:
     """Local control records; no queue connection."""
 
@@ -43,6 +63,11 @@ class JobRepository:
                     document TEXT NOT NULL,
                     sha256 TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS offline_outbox_holds (
+                    job_id TEXT PRIMARY KEY REFERENCES offline_validation_jobs(id),
+                    document TEXT NOT NULL,
+                    sha256 TEXT NOT NULL
+                );
                 INSERT OR IGNORE INTO offline_job_execution (job_id, document)
                     SELECT id, '{"state":"READY","fence":0}' FROM offline_validation_jobs;
                 """
@@ -52,10 +77,26 @@ class JobRepository:
     def _decode(row) -> dict:
         if row is None:
             raise ApplicationError("NOT_FOUND", "Offline job not found.", 404)
-        encoded, digest, message_id, worker_id, dispatched_at, execution_json = row
+        (
+            encoded,
+            digest,
+            message_id,
+            worker_id,
+            dispatched_at,
+            execution_json,
+            job_id,
+            exam_id,
+            tenant_id,
+            owner_id,
+            request_id,
+            checkpoint_id,
+            hold_json,
+            hold_digest,
+        ) = row
         try:
             document = json.loads(encoded)
             execution = json.loads(execution_json)
+            hold = decode_hold(hold_json, hold_digest, job_id, message_id, tenant_id)
             if (
                 hashlib.sha256(encoded.encode()).hexdigest() != digest
                 or document["message_id"] != message_id
@@ -64,6 +105,12 @@ class JobRepository:
                 not in ("READY", "CLAIMED", "RUNNING", "COMPLETED", "CANCELLED")
                 or type(execution["fence"]) is not int
                 or execution["fence"] < 0
+                or document["id"] != job_id
+                or document["binding"]["exam_id"] != exam_id
+                or document["binding"]["tenant_id"] != tenant_id
+                or document["binding"]["owner_id"] != owner_id
+                or document["request_id"] != request_id
+                or document["checkpoint_id"] != checkpoint_id
             ):
                 raise job_integrity_error()
         except (ValueError, TypeError, KeyError) as error:
@@ -74,11 +121,14 @@ class JobRepository:
             "state": (
                 execution["state"]
                 if execution["state"] != "READY"
+                else hold["state"]
+                if hold is not None
                 else "PENDING_DISPATCH"
                 if worker_id is None
                 else "DISPATCHED"
             ),
             "execution": execution,
+            "outbox_hold": hold,
             "worker_id": worker_id,
             "dispatched_at": dispatched_at,
         }
@@ -87,8 +137,11 @@ class JobRepository:
     def _select(connection, where: str, parameters):
         return connection.execute(
             "SELECT j.document, j.sha256, o.message_id, o.worker_id, o.dispatched_at, e.document "
+            ", j.id, j.exam_id, j.tenant_id, j.owner_id, j.request_id, j.checkpoint_id "
+            ", h.document, h.sha256 "
             "FROM offline_validation_jobs j JOIN offline_job_outbox o ON o.job_id=j.id "
             "JOIN offline_job_execution e ON e.job_id=j.id "
+            "LEFT JOIN offline_outbox_holds h ON h.job_id=j.id "
             f"WHERE {where}",
             parameters,
         ).fetchone()
@@ -162,7 +215,10 @@ class JobRepository:
                 "JOIN offline_job_outbox o ON o.job_id=j.id "
                 "JOIN offline_job_execution e ON e.job_id=j.id "
                 "WHERE j.tenant_id=? AND o.worker_id IS NULL "
-                "AND json_extract(e.document, '$.state')='READY' ORDER BY j.id LIMIT ?",
+                "AND CASE WHEN json_valid(e.document) "
+                "THEN json_extract(e.document, '$.state') ELSE 'INVALID' END='READY' "
+                "AND NOT EXISTS (SELECT 1 FROM offline_outbox_holds h WHERE h.job_id=j.id) "
+                "ORDER BY j.id LIMIT ?",
                 (tenant_id, limit),
             ).fetchall()
         return [{"job_id": job_id, "message_id": message_id} for job_id, message_id in rows]
@@ -179,6 +235,10 @@ class JobRepository:
                 raise job_integrity_error()
             if current["state"] == "CANCELLED":
                 raise ApplicationError("JOB_CANCELLED", "This job has been cancelled.", 409)
+            if current["outbox_hold"] is not None:
+                raise ApplicationError(
+                    "OUTBOX_HELD", "This pending job has an immutable hold.", 409
+                )
             if current["worker_id"] is not None:
                 if current["worker_id"] != worker_id:
                     raise ApplicationError(

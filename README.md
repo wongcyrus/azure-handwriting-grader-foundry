@@ -8,16 +8,11 @@ The reusable grading engine is a pinned optional dependency, not copied into thi
 **Test/agent handoff:** [Persistent checklist](docs/test-checklist.md) and
 [continuation instructions](AGENTS.md).
 
-**Publication status:** Public `main` currently contains the initial documentation
-only. Foundation `e8ad9cf`, attendance `708cff1` and region review `9d05ab0` are local,
-not pushed. Canvas `9f8e2f0` and owned selection `184875d` are also local commits.
-Input setup/review `bff8e5b` and offline CI `7eb4ed8` are also local only. Setup commands
-below apply to this worktree or after implementation files are published.
-Input-edge browser regressions are committed as `66bc1eb`, also unpushed.
-Offline review-workspace hydration is committed as `0af4d51`, also unpushed.
-Explicit engine input approval mapping is committed as `ed07852`, also unpushed.
-Offline job intent/outbox control is committed as `9316676`, also unpushed.
-Fenced offline execution/cancellation and its tests remain uncommitted pending review.
+**Publication status:** Public `main` contains the application through `9316676`,
+including input/region review, teacher UI, workspace mapping and offline job
+intents/outbox. Hosted offline CI passed for that commit. Fenced offline
+execution/cancellation is committed locally as `8152657`, not pushed.
+The new local outbox reconciliation increment remains uncommitted pending review.
 
 ## Implementation status
 
@@ -47,6 +42,8 @@ The current increment implements durable **local input/region review and offline
   stable request/message IDs, owner scoping and assignment-bound worker artifact reads.
 - Internal read-only validation execution: five-minute fenced claims, stale-safe
   teacher cancellation, immutable results and safe recovery/reuse.
+- Internal tenant-scoped outbox status and bounded cursor reconciliation:
+  immutable stale/invalid-record holds without changing intents or teacher approvals.
 
 **Not implemented:** production Blob/Queue adapters, all-script orientation/sequence review,
 production sign-in, direct roster/rubric/score editors, pricing and budget gates, grading jobs,
@@ -152,8 +149,44 @@ Admission and dispatch are **internal local control records, not execution**.
 `DISPATCHED` means an acknowledgement was recorded; no queue message is sent and
 no validation or grading starts automatically. Read grants are not execution
 claims. No worker HTTP routes or production service-identity authentication
-were added. Real queue delivery, stale-outbox reconciliation and cloud permission
-separation remain pending.
+were added. Real queue delivery and cloud permission separation remain pending.
+
+### Local outbox reconciliation
+
+Trusted dispatcher code can inspect delivery metadata and reconcile pending
+records without executing or sending anything:
+
+```python
+from handwriting_grader_cloud.outbox import OutboxReconciler
+
+reconciler = OutboxReconciler(control)
+status = reconciler.status(dispatcher_principal, limit=20)
+page = reconciler.reconcile(dispatcher_principal, limit=20)
+next_cursor = page["next_cursor"]
+```
+
+Both methods require `JobDispatcher`, use protected tenant index records and
+accept a strict 1-50 row limit and opaque UUID cursor. Pass `cursor=next_cursor`
+when paging; this progresses past unchanged current rows rather than repeatedly
+inspecting the first page. Status contains opaque job/message IDs and hold
+metadata, not student content. It describes delivery state, not full artifact
+validation or execution readiness.
+
+Reconciliation checks the immutable intent/index/hash and current approved
+binding/checkpoint metadata. `CURRENT` means those metadata checks pass; actual
+file bytes and pinned-engine preflight are still rechecked before execution.
+Stale pending snapshots receive a `STALE` hold; malformed/mismatched control
+records receive `QUARANTINED`. Unknown transient errors propagate without
+manufacturing a permanent hold.
+
+Each hold has its own hash, dispatcher identity and server UTC time. The original
+intent, outbox, exam and human approval history remain unchanged. Held entries
+are excluded from pending delivery, and dispatch rechecks the hold atomically.
+Holds survive restart, are idempotent and have no automatic release/repair path.
+Cancellation remains a separate Teacher action and can cancel a stale held job.
+Already assigned or cancelled records are not held by this pending-only reconciler.
+This is not a queue poison-message consumer, automatic retry loop, scheduler,
+new HTTP route, worker authentication boundary or paid-stage permission.
 
 ### Fenced offline execution
 
@@ -325,9 +358,11 @@ Official actions are pinned to reviewed commit hashes. It requests read-only
 repository access, uses no Azure credentials and performs no deployments/model
 calls. Only synthetic JUnit XML is uploaded, not databases or browser traces.
 
-Workflow lint and the equivalent local commands pass. **GitHub-hosted execution
-is unverified:** implementation/workflow publication has not been authorized or
-pushed. Production release/deployment CI remains a separate milestone.
+Workflow lint and the equivalent local commands pass. Hosted offline validation
+also passed for published `9316676`:
+[observed run](https://github.com/wongcyrus/azure-handwriting-grader-foundry/actions/runs/45528244778).
+This does not verify the newer local execution/reconciliation increments.
+Production release/deployment CI remains a separate milestone.
 
 ## Local teacher canvas
 

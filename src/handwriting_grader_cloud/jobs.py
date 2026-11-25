@@ -61,8 +61,12 @@ class OfflineJobControl:
     def _current(self, job: dict) -> dict:
         if job["state"] == "CANCELLED":
             raise ApplicationError("JOB_CANCELLED", "This job has been cancelled.", 409)
+        if job["outbox_hold"] is not None:
+            raise ApplicationError("OUTBOX_HELD", "This pending job has an immutable hold.", 409)
         intent = job["intent"]
         try:
+            if intent["schema_version"] != 1 or intent["stage"] != OFFLINE_STAGE:
+                raise job_integrity_error()
             binding = intent["binding"]
             document = self.repository.get(binding["exam_id"])
             approvals = {
@@ -72,9 +76,7 @@ class OfflineJobControl:
             if "attendance" in document["artifacts"]:
                 approvals["attendance"] = document["current_attendance_approval"]
             if (
-                intent["schema_version"] != 1
-                or intent["stage"] != OFFLINE_STAGE
-                or document["state"] != "REGIONS_REVIEWED"
+                document["state"] != "REGIONS_REVIEWED"
                 or document["version"] != binding["exam_version"]
                 or document["tenant_id"] != binding["tenant_id"]
                 or document["owner_id"] != binding["owner_id"]

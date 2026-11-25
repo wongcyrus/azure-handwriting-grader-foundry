@@ -11,17 +11,10 @@ the previous agent's chat or session todo database is not required.
   `preflight.py`; never copy its grading logic or silently track `main`.
 - Keep changes compatible with existing local grader/skill users.
 - Do not commit or push implementation/checklist changes until the user reviews
-  and explicitly approves them. The existing public commit is documentation only.
-  Foundation `e8ad9cf`, attendance `708cff1` and region review `9d05ab0` are local
-  and unpushed; subsequent changes still need separate review and approval.
-  Teacher canvas is committed as `9f8e2f0`, also local only.
-  Owned-exam selection is committed as `184875d`, also unpushed.
-  Input setup/review is committed as `bff8e5b`, also unpushed.
-  Offline CI is committed as `7eb4ed8`, also unpushed.
-  Input-edge browser regressions are committed as `66bc1eb`, also unpushed.
-  Offline review-workspace hydration is committed as `0af4d51`, also unpushed.
-  Explicit engine input approval mapping is committed as `ed07852`, also unpushed.
-  Offline validation intent/outbox control is committed as `9316676`, also unpushed.
+  and explicitly approves them. Public `main` now contains the application
+  through `9316676`, with successful hosted offline CI. Fenced offline execution
+  is committed locally as `8152657`, not pushed. New reconciliation changes
+  still need separate review/commit/publication approval.
 - No Azure deployment, paid inference, real student data or email without the
   relevant explicit approvals.
 - Local development is localhost-only and synthetic-data-only. SQLite is not the
@@ -68,6 +61,15 @@ the previous agent's chat or session todo database is not required.
   workspace; do not forge Teacher authority or call engine approval/grading
   actions. No queue client, worker HTTP authentication, model configuration or
   paid-stage admission is implemented.
+- `OutboxReconciler` is pending-only local control metadata inspection, not a
+  queue consumer or executor. Require a trusted `JobDispatcher`, protected
+  tenant indexes, strict limits and opaque cursor paging. Recheck candidates
+  under `BEGIN IMMEDIATE`; skip assigned/cancelled entries. Preserve immutable
+  intent and human authority. Record hashed immutable stale/invalid holds;
+  propagate unknown transient errors, never classify them as terminal poison.
+  Normal pending delivery excludes holds and assignment rechecks them.
+  `CURRENT` is metadata consistency, not full artifact/engine validation.
+  No automatic hold release, retry scheduler or real transport is implemented.
 
 ## Validation and handoff
 

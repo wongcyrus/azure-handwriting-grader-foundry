@@ -7,22 +7,16 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 ## Current checkout and publication
 
 - Repository: `wongcyrus/azure-handwriting-grader-foundry`.
-- Published baseline: `a662755538d079f896a7ee5a6306a3c84f4c6a12`, docs-only.
-- Verified foundation committed locally as `e8ad9cf` after explicit user approval;
-  attendance committed as `708cff1` after explicit approval. Neither is pushed.
-  Region review `9d05ab0` and canvas `9f8e2f0` are also unpushed.
-  Owned-exam selection is committed as `184875d`, also unpushed. The user has
-  authorized committing verified input setup/review, now `bff8e5b` (unpushed).
-  Offline CI is committed as `7eb4ed8` after explicit approval, also unpushed.
-  Browser input-edge regressions are committed as `66bc1eb` after explicit
-  approval, also unpushed. Offline review-workspace hydration is committed as
-  `0af4d51` after explicit approval, also unpushed. Explicit engine input
-  approval mapping is committed as `ed07852`, also unpushed. Offline validation
-  job control is committed as `9316676`, also unpushed. Fenced offline execution,
-  cancellation and this handoff are uncommitted pending review;
-  publication is not authorized.
-- A fresh GitHub clone does not yet contain the application. Another agent must
-  use this worktree until publication is explicitly approved.
+- Initial docs baseline: `a662755538d079f896a7ee5a6306a3c84f4c6a12`.
+- Published after explicit push approval through `9316676`: foundation `e8ad9cf`,
+  attendance `708cff1`, region review `9d05ab0`, canvas `9f8e2f0`, owned selection
+  `184875d`, input setup `bff8e5b`, offline CI `7eb4ed8`, browser edges `66bc1eb`,
+  workspace hydration `0af4d51`, engine mapping `ed07852` and job control `9316676`.
+- Fenced execution/cancellation is committed locally as `8152657` after explicit
+  approval, not pushed. New outbox reconciliation and this handoff remain
+  uncommitted pending review; further commit/publication is not authorized.
+- A fresh GitHub clone contains the application through `9316676`, not the newer
+  local execution/reconciliation increments. Continue in this worktree for those.
 - Engine pin: `3b155f9232cb0730587d89677c932ea049dd7f71`.
 - New cloud dependencies belong here, not in the engine's default installation.
 - No Azure resources, paid inference, email or real student uploads authorized.
@@ -41,6 +35,7 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | Engine input approval mapping | Explicit control-owned projection of current API attestations; original bytes/times/revision, pinned read-only validation and stable recovery; no paid/job authority |
 | Offline validation intents/outbox | Explicit confirmed owner requests, immutable idempotent intent + atomic outbox, trusted dispatcher assignment and scoped worker reads; no queue or paid stage |
 | Offline validation execution | Internal read-only pinned-engine checks, five-minute per-attempt fenced claims, stale-safe teacher cancellation and immutable/reused results; no scheduler, HTTP worker auth or paid stage |
+| Local outbox reconciliation | Trusted dispatcher tenant-scoped cursor inspection, immutable stale/invalid holds, idempotent/race-safe pending cleanup; no actual transport or automatic repair |
 | Attendance | Optional complete CSV upload, status preview and independent teacher attestation; production acceptance pending |
 | Region review | First-present-script JPEG template, actual pixel dimensions, validated drafts and separate geometry attestation |
 | Local teacher canvas | React/TypeScript pointer/keyboard editing, CSS/zoom/DPR conversion, page review, approval and explicit conflict recovery |
@@ -48,7 +43,7 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | Skills/Foundry protocol/hosting | Not implemented |
 | Teacher setup/input review | Local creation, raw uploads, layout settings, full roster/rubric/status preview and explicit input/attendance approval |
 | Score UI and production login | Not implemented; all browser flows remain synthetic localhost only |
-| Offline CI | Pinned-action workflow linted; equivalent local commands passed; GitHub-hosted execution unverified |
+| Offline CI | Pinned-action workflow linted; equivalent local commands passed; hosted run passed for published `9316676`, not newer local changes |
 | Terraform/release/cloud deployment | Not implemented |
 | Grading/reports/delivery | Not implemented; no paid or grading endpoint |
 
@@ -107,6 +102,7 @@ uv run --frozen --extra dev --extra engine pytest tests/test_workspace.py tests/
 uv run --frozen --extra dev --extra engine pytest tests/test_engine_workspace.py tests/test_workspace.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_jobs.py tests/test_engine_workspace.py tests/test_workspace.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_execution.py tests/test_jobs.py tests/test_engine_workspace.py tests/test_workspace.py tests/test_repository.py
+uv run --frozen --extra dev --extra engine pytest tests/test_outbox.py tests/test_jobs.py tests/test_execution.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_api.py tests/test_auth.py tests/test_repository.py
 ```
 
@@ -322,6 +318,49 @@ No dependencies were changed/restored. No grading, approval actions, model
 clients, network calls, real student data, cloud resources, push or new commit
 were used. New execution code/tests and this handoff await separate review.
 
+### Published offline CI evidence
+
+Observed at **2026-11-25T02:02:25+00:00**:
+[run 45528244778](https://github.com/wongcyrus/azure-handwriting-grader-foundry/actions/runs/45528244778)
+completed successfully for published `9316676d6fcdce3ad9e08cd49fe1ed7732c3e0f8`.
+Observed successful steps include Python checks, both offline HTTP smoke flows
+and frontend build/check/geometry/browser validation. This is hosted evidence
+for `9316676`, not the newer local execution/reconciliation changes. No hosted
+test count is inferred from local results. No deployment/model calls were added.
+
+### Local outbox reconciliation verification
+
+Verified at **2026-11-25T02:02:25+00:00**:
+
+| Check actually run | Result |
+|---|---|
+| `pytest tests/test_outbox.py tests/test_jobs.py tests/test_execution.py tests/test_repository.py` | 82 passed after the integrity classification fix |
+| Full application pytest suite with `dev` + `engine` extras and JUnit | 278 passed, no failures/errors/skips; 68 core and 210 real-engine cases, including 25 new outbox cases |
+| `pytest --collect-only -q -m engine` | Confirmed 210 real-engine cases without rerunning tests |
+| `ruff check .` and `ruff format --check .` | Passed; 35 files |
+| Final JUnit, documentation links/fences, selectors and `git diff --check` | Passed; 278 cases with no failures/errors/skips and 131 executable selectors |
+
+The first focused command reported 79 passed and one failure: corrupt checkpoint
+metadata raised the repository's `WORKSPACE_INTEGRITY` rather than
+`JOB_INTEGRITY`. The reconciler was corrected to quarantine that known integrity
+failure, while unknown/transient errors still propagate. Two concurrent/audit
+scope cases were then added. The focused 82-case and full 278-case runs passed;
+no earlier failure is claimed as a pass.
+
+The hold and its audit hash are separately persisted under a write transaction.
+Immutable intents, human review/version/history and worker claims are not
+rewritten. Tests cover strict paging/tenant/role checks, current/stale/invalid
+records, interruption rollback, protected index consistency, concurrent
+reconciliation and assignment/cancellation/input races. Holds have no release
+or automatic repair path. This does not implement transport retry caps/backoff,
+a queue poison consumer, actual delivery, scheduling or paid execution.
+
+Raw Python JUnit remains at ignored `.local/test-results/pytest.xml`. No
+dependency manifests were changed or packages restored locally. API routes,
+authentication and frontend sources are unchanged; prior local browser/geometry
+evidence is historical, not a new local run. This reconciliation increment
+remains uncommitted and unpushed pending separate review.
+
 ## Local foundation regression cases
 
 - [x] `tests/test_auth.py::test_valid_delegated_token`: signed delegated token accepted.
@@ -406,9 +445,10 @@ were used. New execution code/tests and this handoff await separate review.
 
 1. Run the required commands above and inspect `git status --short`.
 2. Do not treat locally committed or untracked implementation as already published.
-3. Next bounded task: reconcile stale/poison local outbox records and define
-  bounded offline delivery/retry observability before a queue adapter. Preserve
-  five-minute per-attempt fencing, cancellation and immutable result reuse.
+3. Next bounded task: define a synthetic transport/retry contract before a queue
+  adapter; obtain explicit retry-cap/backoff decisions rather than assuming
+  unlimited delivery retries. Preserve pending-only immutable reconciliation
+  holds, five-minute per-attempt fencing, cancellation and immutable result reuse.
   A live duplicate cannot start execution; expiry may allow overlapping CPU
   validation but only the current live attempt can publish. Retry eligibility
   does not mean a scheduler/consumer exists. Do not connect real queues,
@@ -650,7 +690,8 @@ are explicitly non-paid; no automatic submission follows human approval.
 - [x] `tests/test_jobs.py::test_dispatch_outbox_limits_are_strictly_bounded`.
 - [x] Local fenced/expiring execution claims, teacher cancellation and immutable
   read-only validation results; cases below.
-- [ ] Stale-outbox reconciliation, poison handling and real queue delivery.
+- [x] Local stale/invalid pending outbox reconciliation and immutable holds; cases below.
+- [ ] Real queue delivery, bounded transport retry policy and queue poison-message handling.
 - [ ] Production worker authentication and separate control/artifact permissions,
   cloud job APIs/UI, approved paid budgets/stages and Foundry runtime execution.
 
@@ -689,3 +730,30 @@ renewal is implemented.
 - [x] `tests/test_execution.py::test_completed_result_is_integrity_checked_and_remains_historical`.
 - [ ] Production parsing isolation, capacity/lease sizing, worker authentication,
   cloud control/data permissions and paid-stage result/usage checkpoints.
+
+## Local outbox reconciliation cases
+
+These real-engine-backed synthetic setups retain the existing client/network
+guards. Reconciliation never executes the job or engine approval/grading actions.
+Only protected control/index/hash/snapshot/checkpoint metadata is inspected;
+`CURRENT` is not a substitute for scoped byte validation or engine preflight.
+
+- [x] `tests/test_outbox.py::test_current_pending_metadata_stays_eligible_without_execution_or_authority_changes`.
+- [x] `tests/test_outbox.py::test_stale_pending_job_has_immutable_hold_surviving_restart`:
+  removed from pending delivery without deleting intent/history; hold survives
+  repository replacement and later Teacher cancellation preserves its audit.
+- [x] `tests/test_outbox.py::test_poison_pending_control_records_are_quarantined_without_rewriting_evidence`:
+  bad JSON/hash, rehashed paid stage/foreign binding, missing/invalid execution
+  metadata and corrupt checkpoint are held without rewriting original evidence.
+- [x] `tests/test_outbox.py::test_outbox_reconciliation_and_status_require_trusted_dispatcher`.
+- [x] `tests/test_outbox.py::test_outbox_inspection_and_mutation_do_not_cross_tenants`.
+- [x] `tests/test_outbox.py::test_outbox_page_limits_and_cursor_are_strict`.
+- [x] `tests/test_outbox.py::test_cursor_progresses_past_unchanged_current_jobs_to_later_poison`.
+- [x] `tests/test_outbox.py::test_reconciliation_rechecks_control_after_candidate_scan`:
+  assignment/cancellation wins without a hold; changed inputs produce a stale hold.
+- [x] `tests/test_outbox.py::test_transient_control_errors_are_not_terminal_quarantine`.
+- [x] `tests/test_outbox.py::test_hold_insert_failure_rolls_back_without_changing_job_or_approval`.
+- [x] `tests/test_outbox.py::test_concurrent_reconciliation_records_only_one_immutable_hold`.
+- [x] `tests/test_outbox.py::test_rehashed_foreign_hold_cannot_replace_local_audit_scope`.
+- [ ] Real transport poison messages, retry caps/backoff, operator hold repair/release,
+  queue delivery/consumer, worker identity and production permission separation.
