@@ -14,8 +14,9 @@ the previous agent's chat or session todo database is not required.
   and explicitly approves them. Public `main` now contains the application
   through `9316676`, with successful hosted offline CI. Fenced offline execution
   is committed locally as `8152657`, not pushed. Outbox reconciliation is
-  committed locally as `9631574`, also not pushed. New simulated-delivery changes
-  still need separate review/commit/publication approval.
+  committed locally as `9631574`, also not pushed. Simulated delivery is committed
+  locally as `cd6795f`, also not pushed. New consumer/lifecycle changes still need
+  separate review/commit/publication approval.
 - No Azure deployment, paid inference, real student data or email without the
   relevant explicit approvals.
 - Local development is localhost-only and synthetic-data-only. SQLite is not the
@@ -81,6 +82,15 @@ the previous agent's chat or session todo database is not required.
   Never bypass managed delivery through the legacy acknowledgement API.
   `SimulatedQueue` is not durable storage. No consumer, scheduler, real queue
   client, production dispatcher identity or new HTTP permission is implemented.
+- `OfflineJobCoordinator` is one-shot internal consumption, not a background
+  queue/ack loop. Require a strict opaque envelope, the actual authenticated
+  assigned `StageWorker`, current approved scope and protected confirmed
+  delivery; no legacy assignment or body-selected authority is sufficient.
+  Do not forge Teacher/Dispatcher principals to read or hydrate worker state.
+  Owner-only lifecycle/result inspection never starts work or approves inputs.
+  Recheck the observed exam version and validate result hashes before showing
+  success; distinguish historical validation after edits from current authority.
+  Preserve separate send/execution fencing and immutable result reuse.
 
 ## Validation and handoff
 

@@ -14,10 +14,11 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
   workspace hydration `0af4d51`, engine mapping `ed07852` and job control `9316676`.
 - Fenced execution/cancellation is committed locally as `8152657` after explicit
   approval, not pushed. Outbox reconciliation is committed locally as `9631574`,
-  also not pushed. New simulated delivery and this handoff remain uncommitted
+  also not pushed. Simulated delivery is committed locally as `cd6795f`, also
+  not pushed. New consumer/lifecycle code and this handoff remain uncommitted
   pending review; further commit/publication is not authorized.
 - A fresh GitHub clone contains the application through `9316676`, not the newer
-  local execution/reconciliation/delivery increments. Continue in this worktree for those.
+  local execution/reconciliation/delivery/consumer increments. Continue in this worktree for those.
 - Engine pin: `3b155f9232cb0730587d89677c932ea049dd7f71`.
 - New cloud dependencies belong here, not in the engine's default installation.
 - No Azure resources, paid inference, email or real student uploads authorized.
@@ -38,6 +39,7 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | Offline validation execution | Internal read-only pinned-engine checks, five-minute per-attempt fenced claims, stale-safe teacher cancellation and immutable/reused results; no scheduler, HTTP worker auth or paid stage |
 | Local outbox reconciliation | Trusted dispatcher tenant-scoped cursor inspection, immutable stale/invalid holds, idempotent/race-safe pending cleanup; no actual transport or automatic repair |
 | Simulated delivery | Durable fenced send watermarks, stable recipient/message, three attempts with 5/30-second waits and exhaustion review; no real queue, consumer or scheduler |
+| Offline coordinator | One-shot strict-envelope/confirmed-delivery consumption and owner-only lifecycle/historical result inspection; no background consumer, HTTP routes or paid work |
 | Attendance | Optional complete CSV upload, status preview and independent teacher attestation; production acceptance pending |
 | Region review | First-present-script JPEG template, actual pixel dimensions, validated drafts and separate geometry attestation |
 | Local teacher canvas | React/TypeScript pointer/keyboard editing, CSS/zoom/DPR conversion, page review, approval and explicit conflict recovery |
@@ -106,6 +108,7 @@ uv run --frozen --extra dev --extra engine pytest tests/test_jobs.py tests/test_
 uv run --frozen --extra dev --extra engine pytest tests/test_execution.py tests/test_jobs.py tests/test_engine_workspace.py tests/test_workspace.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_outbox.py tests/test_jobs.py tests/test_execution.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_delivery.py tests/test_outbox.py tests/test_jobs.py tests/test_execution.py tests/test_repository.py
+uv run --frozen --extra dev --extra engine pytest tests/test_coordinator.py tests/test_delivery.py tests/test_outbox.py tests/test_jobs.py tests/test_execution.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_api.py tests/test_auth.py tests/test_repository.py
 ```
 
@@ -395,6 +398,37 @@ remains historical, not a new run for this increment. `SimulatedQueue` is not
 durable message storage and no consumer, scheduler, real adapter, cloud resources
 or paid-stage retries are enabled. This increment is uncommitted and unpushed.
 
+### One-shot consumer and lifecycle verification
+
+Verified at **2026-11-25T02:27:15+00:00**:
+
+| Check actually run | Result |
+|---|---|
+| `pytest tests/test_coordinator.py tests/test_delivery.py tests/test_outbox.py tests/test_jobs.py tests/test_execution.py tests/test_repository.py` | 141 passed; initial 138-case run also passed before three final authority/expiry cases |
+| Full application pytest suite with `dev` + `engine` extras and JUnit | 337 passed, no failures/errors/skips; 68 core and 269 real-engine cases, including 32 coordinator cases |
+| `pytest --collect-only -q -m engine` | Confirmed 269 real-engine cases without rerunning tests |
+| `ruff check .` and `ruff format --check .` | Passed; 39 files |
+| Final JUnit, documentation links/fences, selectors and `git diff --check` | Passed; 337 cases with no failures/errors/skips and 165 executable selectors |
+
+After adding three final cases, lint caught one unsorted import block and stopped
+before pytest ran. Ruff's import fix was applied; the subsequent focused/full
+commands passed. No test failure or stopped command is reported as a pass.
+
+Positive with/without-attendance cases use actual confirmed simulated delivery
+and pinned-engine validation, not fake validators. Tests cover strict envelopes,
+authenticated assignment and receipt scope, no legacy/unconfirmed bypass,
+live claims and expiry, duplicate result reuse, owner/tenant checks, held/stale/
+cancelled/historical states, corrupt results and snapshot-inspection races.
+Inspection never sends, consumes, retries or approves automatically.
+
+Raw JUnit remains at ignored `.local/test-results/pytest.xml`. No dependencies
+were changed/restored; existing network/model guards and approval/grading
+prohibitions remain active. HTTP routes, authentication and frontend are
+unchanged, so earlier browser/HTTP evidence is historical, not a fresh run.
+The coordinator is internal one-shot code, not production queue polling,
+durable acknowledgements, service identity or paid execution. New code/tests
+and this handoff await review; nothing in this increment was committed/pushed.
+
 ## Local foundation regression cases
 
 - [x] `tests/test_auth.py::test_valid_delegated_token`: signed delegated token accepted.
@@ -479,8 +513,9 @@ or paid-stage retries are enabled. This increment is uncommitted and unpushed.
 
 1. Run the required commands above and inspect `git status --short`.
 2. Do not treat locally committed or untracked implementation as already published.
-3. Next bounded task: add a synthetic local consumer/coordinator contract and
-  explicit lifecycle/result inspection before any real queue adapter. Preserve
+3. Next bounded task: expose teacher-owned offline job/lifecycle/result HTTP
+  integration with explicit confirmation and current-version checks; no worker
+  HTTP authentication or paid-stage admission should be inferred. Preserve
   the approved three-attempt 5/30-second transport policy, separate five-minute
   send/execution fences, immutable reconciliation holds and result reuse.
   A live duplicate cannot start execution; expiry may allow overlapping CPU
@@ -827,3 +862,32 @@ No background consumer/timer or real transport is enabled.
 - [x] `tests/test_delivery.py::test_delivery_history_is_visible_only_to_its_tenant_dispatcher`.
 - [ ] Durable queue storage, actual consumer delivery/visibility/poison handling,
   dispatcher service identity, operator hold-release policy and paid-stage retry rules.
+
+## One-shot offline consumer and lifecycle cases
+
+The coordinator uses the actual authenticated worker and protected receipt/
+assignment; queue fields are untrusted routing hints, not execution authority.
+Consumption is explicit and one-shot. Owner status/results are read-only and
+do not issue a send, retry, approval or engine call. No HTTP worker route,
+background queue loop or real transport is added.
+
+- [x] `tests/test_coordinator.py::test_real_confirmed_queue_consumption_and_owner_lifecycle_reuse_result`:
+  with/without attendance, actual pinned-engine validation, pending/ready/running/
+  validated states, duplicate reuse, unchanged human history and private cleanup.
+- [x] `tests/test_coordinator.py::test_queue_envelope_cannot_supply_stage_role_paths_or_execution_authority`.
+- [x] `tests/test_coordinator.py::test_queue_consumption_requires_authenticated_assigned_worker`.
+- [x] `tests/test_coordinator.py::test_opaque_message_ids_and_recipient_are_not_authority`.
+- [x] `tests/test_coordinator.py::test_legacy_assignment_does_not_authorize_queue_consumption`.
+- [x] `tests/test_coordinator.py::test_accepted_unconfirmed_message_is_not_consumer_authority`.
+- [x] `tests/test_coordinator.py::test_lifecycle_and_historical_result_inspection_are_owner_teacher_scoped`.
+- [x] `tests/test_coordinator.py::test_owner_lifecycle_tracks_live_and_expired_claims_without_starting_work`.
+- [x] `tests/test_coordinator.py::test_cancelled_or_stale_job_is_inspectable_but_cannot_be_consumed`.
+- [x] `tests/test_coordinator.py::test_old_validation_result_is_explicitly_historical_after_input_changes`.
+- [x] `tests/test_coordinator.py::test_owner_lifecycle_exposes_exhausted_delivery_hold_without_auto_release`.
+- [x] `tests/test_coordinator.py::test_owner_lifecycle_rechecks_version_after_snapshot_inspection`.
+- [x] `tests/test_coordinator.py::test_corrupt_committed_result_cannot_be_reported_as_success`.
+- [x] `tests/test_coordinator.py::test_consumer_cannot_bypass_another_live_execution_claim`.
+- [x] `tests/test_coordinator.py::test_owner_can_inspect_expired_unknown_send_without_triggering_a_retry`.
+- [x] `tests/test_coordinator.py::test_consumer_validates_protected_delivery_record_not_just_envelope`.
+- [ ] Real queue durable acknowledgement/visibility recovery, owner HTTP job/UI
+  integration, production worker service identity and all paid/grading workflows.

@@ -13,7 +13,8 @@ including input/region review, teacher UI, workspace mapping and offline job
 intents/outbox. Hosted offline CI passed for that commit. Fenced offline
 execution/cancellation is committed locally as `8152657`, not pushed.
 Outbox reconciliation is committed locally as `9631574`, also not pushed.
-The new bounded simulated-delivery increment remains uncommitted pending review.
+Bounded simulated delivery is committed locally as `cd6795f`, also not pushed.
+The new offline consumer/lifecycle increment remains uncommitted pending review.
 
 ## Implementation status
 
@@ -47,6 +48,8 @@ The current increment implements durable **local input/region review and offline
   immutable stale/invalid-record holds without changing intents or teacher approvals.
 - Bounded simulated delivery: durable send watermarks, three attempts with 5/30-second
   retry waits, lost-acknowledgement recovery and terminal operator-review holds.
+- One-shot offline consumption and owner-only lifecycle/result inspection:
+  confirmed scoped delivery, strict envelopes, fenced result reuse and explicit historical states.
 
 **Not implemented:** production Blob/Queue adapters, all-script orientation/sequence review,
 production sign-in, direct roster/rubric/score editors, pricing and budget gates, grading jobs,
@@ -286,6 +289,47 @@ rerunning validation. `executor.owned_result(principal, exam_id, job_id)` allows
 the owner to inspect a historical result after later edits; it is not current
 approval or permission to grade. Expired, failed or crashed validation remains
 eligible for a replacement attempt, but no queue consumer/scheduler is running.
+
+### One-shot offline coordinator
+
+Server-controlled components sharing the same trusted `OfflineJobControl` can
+connect the simulated message to the read-only executor:
+
+```python
+from handwriting_grader_cloud.coordinator import OfflineJobCoordinator
+
+coordinator = OfflineJobCoordinator(control, dispatcher, executor)
+before = coordinator.owned_status(principal, exam_id, job_id)
+result = coordinator.consume(worker_principal, queue.messages[0], attempt_id=uuid4())
+after = coordinator.owned_status(principal, exam_id, job_id)
+reviewed_result = coordinator.owned_result(principal, exam_id, job_id)
+```
+
+This is an explicit one-shot call, not a background consumer, visibility lease,
+delete/acknowledgement loop or new HTTP worker route. It accepts only strict
+opaque job/message/recipient fields. Body-selected roles, stages, paths,
+receipts and execution claims are rejected. The recipient field is not authority:
+the actual authenticated `StageWorker`, protected assignment, current job scope
+and confirmed delivery record must all match before the executor runs.
+Legacy assignment alone or an accepted message with an unconfirmed enqueue
+does not authorize consumption. No Teacher/Dispatcher principal is forged.
+
+`owned_status` and `owned_result` require the current owner Teacher and tenant.
+Inspection performs no send, retry, execution or automatic approval. Status
+separates delivery from validation; live/expired claims, pending retries,
+operator holds, cancellation and stale inputs remain visible.
+`eligible_for_validation` describes the observed coordinator scope, not a
+transferable permission: actual consumption rechecks authority and the live fence.
+Concurrent edits produce a stale-view conflict rather than a misleading current view.
+
+A completed result is hash-checked before success is displayed and reused on
+duplicate consumption. Later input edits produce `VALIDATED_HISTORICAL`; the
+owner may inspect that original result, but it cannot approve the new inputs
+or grant grading. Live duplicates cannot bypass execution claims; expired
+read-only validation can be replaced under the existing separate execution policy.
+The three-send transport cap does not grant paid-call retries. Real queue
+storage/consumer recovery, production identities, HTTP job integration, teacher
+UI and all paid/grading stages remain pending.
 
 ## Local setup and tests
 
