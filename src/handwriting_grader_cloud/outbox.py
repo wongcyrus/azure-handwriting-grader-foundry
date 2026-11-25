@@ -123,6 +123,14 @@ class OutboxReconciler:
             )
         return state
 
+    def reconcile_job(self, principal: Principal, job_id: UUID) -> dict:
+        self.control._role(principal, "JobDispatcher")
+        try:
+            identifier = str(UUID(str(job_id)))
+        except (ValueError, TypeError, AttributeError) as error:
+            raise ApplicationError("INVALID_JOB", "Use an opaque UUID job identifier.") from error
+        return {"job_id": identifier, "state": self._reconcile_one(principal, identifier)}
+
     def reconcile(self, principal: Principal, limit: int = 20, cursor: UUID | None = None) -> dict:
         rows, next_cursor = self._page(principal, limit, cursor, pending=True)
         outcomes = [

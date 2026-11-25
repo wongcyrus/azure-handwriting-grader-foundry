@@ -268,6 +268,12 @@ test("offline paging and actual historical validation stay observational", async
     expect(admitted.status()).toBe(201);
     jobs.push((await admitted.json()).intent.id);
   }
+  await openChecks(page, id);
+  const panel = page.getByRole("region", { name: "Offline input checks" });
+  await panel.getByRole("button", { name: "Refresh offline checks" }).click();
+  await expect(
+    panel.getByRole("cell", { name: "Requested - not started", exact: true }),
+  ).toHaveCount(20);
   execFileSync(
     "uv",
     [
@@ -281,15 +287,9 @@ test("offline paging and actual historical validation stay observational", async
       "-c",
       `
 import socket
-import sys
-from uuid import uuid4
-from pathlib import Path
 from handwriting_grader.azure_ai import AzureClient
 from handwriting_grader import attendance, grading, regions, rubric
-from handwriting_grader_cloud.api import create_app
-from handwriting_grader_cloud.auth import DevelopmentAuthenticator, Principal
-from handwriting_grader_cloud.repository import SQLiteRepository
-from handwriting_grader_cloud.service import ExamService
+from handwriting_grader_cloud.operator import main
 def forbidden(*args, **kwargs):
     raise AssertionError("Synthetic browser validation must not call AI, network, grading or approval actions")
 AzureClient.__init__ = forbidden
@@ -297,27 +297,35 @@ socket.socket.connect = forbidden
 socket.socket.connect_ex = forbidden
 for module, name in ((attendance, "approve_attendance"), (grading, "grade_exam"), (regions, "approve_regions"), (rubric, "approve_rubric")):
     setattr(module, name, forbidden)
-service = ExamService(SQLiteRepository(Path(".local/test-results/canvas.sqlite3")))
-app = create_app(service, DevelopmentAuthenticator("synthetic-offline-helper-only-not-a-real-token"))
-coordinator = app.state.offline_coordinator
-job = coordinator.control.jobs.get(sys.argv[1])
-tenant = job["intent"]["binding"]["tenant_id"]
-dispatcher = Principal(tenant, "synthetic-browser-dispatcher", frozenset({"JobDispatcher"}))
-worker = Principal(tenant, "synthetic-browser-worker", frozenset({"StageWorker"}))
-coordinator.dispatcher.dispatch(dispatcher, sys.argv[1], job["intent"]["message_id"], worker, uuid4())
-coordinator.consume(worker, coordinator.dispatcher.queue.messages[0], uuid4())
+raise SystemExit(main())
 `,
+      "--development",
+      "--database",
+      ".local/test-results/canvas.sqlite3",
+      "--job-id",
       jobs[0],
     ],
     { cwd: resolve(import.meta.dirname, "../../.."), encoding: "utf-8" },
   );
+  await panel.getByRole("button", { name: "Refresh offline checks" }).click();
+  await panel.getByRole("button", { name: "More offline checks" }).click();
+  await expect(panel.getByRole("row")).toHaveCount(22);
+  await panel
+    .getByRole("button", { name: `Inspect check ${jobs[0]}`, exact: true })
+    .click();
+  await expect(
+    panel.getByRole("heading", { name: "Recorded offline validation" }),
+  ).toBeVisible();
+  await expect(
+    panel.getByText("Offline input validation passed", { exact: true }),
+  ).toHaveCount(2);
+  expect((await currentExam(request, id)).document).toEqual(current.document);
   const changed = await request.put(`${API_BASE}/api/exams/${id}/settings`, {
     headers: { ...authHeaders, "If-Match": current.etag },
     data: current.document.settings,
   });
   expect(changed.ok()).toBeTruthy();
   await openChecks(page, id);
-  const panel = page.getByRole("region", { name: "Offline input checks" });
   await panel.getByRole("button", { name: "Refresh offline checks" }).click();
   await expect(panel.getByRole("row")).toHaveCount(21);
   await panel.getByRole("button", { name: "More offline checks" }).click();

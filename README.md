@@ -16,7 +16,8 @@ Outbox reconciliation is committed locally as `9631574`, also not pushed.
 Bounded simulated delivery is committed locally as `cd6795f`, also not pushed.
 One-shot offline consumption/lifecycle is committed locally as `48f3336`, not pushed.
 Teacher-owned offline job HTTP access is committed locally as `1411719`, not pushed.
-The new teacher offline job UI remains uncommitted pending review.
+Teacher offline job UI is committed locally as `c1fe123`, not pushed.
+The new bounded synthetic operator command remains uncommitted pending review.
 
 ## Implementation status
 
@@ -56,6 +57,8 @@ The current increment implements durable **local input/region review and offline
   bounded job discovery and read-only lifecycle/historical result access.
 - Browser offline check controls with explicit consent, stable unknown-response
   replay, manual status refresh/paging, historical summaries and stale-safe cancellation.
+- A manually invoked synthetic operator for one named check: scoped reconciliation,
+  at most one send and validation attempt, protected delivery recovery and result reuse.
 
 **Not implemented:** production Blob/Queue adapters, all-script orientation/sequence review,
 production sign-in, direct roster/rubric/score editors, pricing and budget gates, grading jobs,
@@ -380,9 +383,49 @@ explicit reload adopts the current ETag; discarding unsaved edits needs confirma
 Disconnect removes panel state and the memory-only token.
 
 The local demo still has no running worker: a requested job remains pending
-until separately trusted internal offline execution occurs. Browser tests produce
-one real result through explicit synthetic dispatcher/worker fixtures, with
+until a separately invoked trusted local operator attempts it. Browser tests produce
+one real result through the bounded synthetic operator command, with
 network, Azure client, engine approval and grading actions prohibited.
+
+### Manual synthetic offline operator
+
+After requesting a check in the browser, copy its UUID and use the same local
+database as the API:
+
+```sh
+uv run --frozen --extra dev --extra engine python -m handwriting_grader_cloud.operator \
+  --development --database .local/exams.sqlite3 --job-id "<check-uuid>"
+```
+
+Then **Refresh offline checks** and **Inspect check** in the browser. This
+checks approved files/geometry only; it never reads handwriting, grades or
+calls AI. The user-approved scope is one named check and at most one delivery/
+validation attempt per invocation, with no polling, sleeping or automatic retry.
+The database must already exist and cannot itself be a symlink. No manifest,
+token, arbitrary stage, tenant or worker recipient is accepted by this command.
+
+`--development` is mandatory. The command uses the fixed development tenant,
+dedicated dispatcher UUID ending `0003` and worker UUID ending `0004`, never
+the teacher identity ending `0002`. Local filesystem access is the operator's
+trust boundary, not production service authentication. Never point it at real
+student data or a production database. Other tenants and other workers'
+assignments are rejected.
+
+Named reconciliation touches only that job. Stale/invalid holds and cancellation
+prevent execution. Delivery retains the approved three-total-attempt cap and
+5/30-second waits; a not-yet-due invocation returns without sending or sleeping.
+Five-minute send/execution fencing remains unchanged. A fresh process may
+construct an opaque envelope from a known confirmed control record, but the
+coordinator rechecks the assignment, approved snapshot and protected delivery;
+this is not durable queue storage or a production receipt-recovery guarantee.
+Completed current results are reused without resending/revalidating. Historical
+results remain teacher-readable, but are not executable current job authority.
+
+JSON output contains state, send counts and a validated four-field numeric summary/hash
+when available; runtime errors contain codes, not raw exceptions, file paths or records.
+An unexpected error leaves existing watermarks/claims for explicit later
+inspection/recovery. There is no forced parser termination or lease renewal.
+No background worker, real queue, scheduler or production identity is installed.
 
 ## Local setup and tests
 

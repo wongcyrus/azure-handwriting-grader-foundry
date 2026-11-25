@@ -7,6 +7,8 @@ import jwt
 
 from .errors import ApplicationError
 
+DEVELOPMENT_TENANT_ID = "00000000-0000-0000-0000-000000000001"
+
 
 @dataclass(frozen=True)
 class Principal:
@@ -81,7 +83,7 @@ class DevelopmentAuthenticator:
         if token is None or not hmac.compare_digest(token.encode(), self.token.encode()):
             raise unauthorized()
         return Principal(
-            "00000000-0000-0000-0000-000000000001",
+            DEVELOPMENT_TENANT_ID,
             "00000000-0000-0000-0000-000000000002",
             frozenset({"Teacher"}),
         )

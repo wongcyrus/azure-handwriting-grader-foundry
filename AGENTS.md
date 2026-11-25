@@ -17,7 +17,8 @@ the previous agent's chat or session todo database is not required.
   committed locally as `9631574`, also not pushed. Simulated delivery is committed
   locally as `cd6795f`, also not pushed. Consumer/lifecycle is committed locally
   as `48f3336`, not pushed. Teacher job HTTP is committed locally as `1411719`,
-  not pushed. New teacher job UI changes still need separate
+  not pushed. Teacher job UI is committed locally as `c1fe123`, not pushed.
+  New synthetic operator changes still need separate
   review/commit/publication approval.
 - No Azure deployment, paid inference, real student data or email without the
   relevant explicit approvals.
@@ -110,6 +111,18 @@ the previous agent's chat or session todo database is not required.
   require confirmation. Keep historical summaries distinct from current
   authority/awarded scores. Namespace component keys so input and job panels
   cannot share identity across exam/version changes. Tokens remain memory-only.
+- `python -m handwriting_grader_cloud.operator` requires explicit `--development`,
+  an existing non-symlink database and one job UUID. The user approved one named
+  check and at most one delivery/validation attempt per manual invocation:
+  never poll, sleep, batch, invent approvals or automatically retry. Use only
+  fixed development tenant/dedicated dispatcher and worker identities; no caller
+  role/tenant/stage/recipient options and no teacher impersonation. Filesystem
+  access is a local synthetic trust boundary, not production authentication.
+  Named reconciliation must remain tenant-scoped and must not touch other jobs.
+  Reconstructed opaque envelopes require protected confirmed delivery and current
+  assignment/snapshot checks; do not claim durable queue recovery. Preserve
+  existing retry caps/backoff/fencing, immutable holds and completed result reuse.
+  Emit only bounded state/summary/error codes, not raw exceptions or private data.
 
 ## Validation and handoff
 

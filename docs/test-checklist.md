@@ -17,11 +17,12 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
   also not pushed. Simulated delivery is committed locally as `cd6795f`, also
   not pushed. Consumer/lifecycle is committed locally as `48f3336`, not pushed.
   Teacher job HTTP is committed locally as `1411719`, not pushed.
-  New teacher job UI code and this handoff remain uncommitted
+  Teacher job UI is committed locally as `c1fe123`, not pushed.
+  New synthetic operator code and this handoff remain uncommitted
   pending review; further commit/publication is not authorized.
 - A fresh GitHub clone contains the application through `9316676`, not the newer
-  local execution/reconciliation/delivery/consumer/HTTP increments or uncommitted
-  job UI. Continue in this worktree for those.
+  local execution/reconciliation/delivery/consumer/HTTP/UI increments or uncommitted
+  operator code. Continue in this worktree for those.
 - Engine pin: `3b155f9232cb0730587d89677c932ea049dd7f71`.
 - New cloud dependencies belong here, not in the engine's default installation.
 - No Azure resources, paid inference, email or real student uploads authorized.
@@ -45,6 +46,7 @@ Read it with [the full plan](implementation-plan.md), [README](../README.md) and
 | Offline coordinator | One-shot strict-envelope/confirmed-delivery consumption and owner-only lifecycle/historical result inspection; no background consumer or paid work |
 | Teacher offline job HTTP | Confirmed mapped-input preparation/request/cancellation, owner-indexed bounded listing and lifecycle/historical results; current exam ETags, no worker execution route |
 | Teacher offline job UI | Explicit consent, stable request replay, manual bounded list/status/result reads, historical summaries, confirmed cancellation and reload preserving edits until explicit discard; synthetic only |
+| Local synthetic operator | Explicit development-only one-job command, dedicated identities, named scoped reconciliation, at most one send/validation attempt, manual retry eligibility and confirmed-control/result reuse; no daemon or production auth |
 | Attendance | Optional complete CSV upload, status preview and independent teacher attestation; production acceptance pending |
 | Region review | First-present-script JPEG template, actual pixel dimensions, validated drafts and separate geometry attestation |
 | Local teacher canvas | React/TypeScript pointer/keyboard editing, CSS/zoom/DPR conversion, page review, approval and explicit conflict recovery |
@@ -117,6 +119,7 @@ uv run --frozen --extra dev --extra engine pytest tests/test_outbox.py tests/tes
 uv run --frozen --extra dev --extra engine pytest tests/test_delivery.py tests/test_outbox.py tests/test_jobs.py tests/test_execution.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_coordinator.py tests/test_delivery.py tests/test_outbox.py tests/test_jobs.py tests/test_execution.py tests/test_repository.py
 uv run --frozen --extra dev --extra engine pytest tests/test_job_api.py tests/test_api.py tests/test_auth.py tests/test_repository.py tests/test_coordinator.py tests/test_execution.py
+uv run --frozen --extra dev --extra engine pytest tests/test_operator.py tests/test_outbox.py tests/test_delivery.py tests/test_execution.py tests/test_auth.py
 uv run --frozen --extra dev --extra engine pytest tests/test_api.py tests/test_auth.py tests/test_repository.py
 ```
 
@@ -518,6 +521,56 @@ The preceding teacher HTTP increment was committed after explicit approval as
 review. Local controls are not school/production acceptance; the next operator
 entrypoint needs an explicit bounded identity/scope decision.
 
+### Bounded synthetic operator verification
+
+Verified at **2026-11-25T03:13:36+00:00**:
+
+| Check actually run | Result |
+|---|---|
+| `pytest tests/test_operator.py tests/test_outbox.py tests/test_delivery.py tests/test_execution.py tests/test_auth.py` | 111 passed after correcting the existing live-claim error-code assertion |
+| Final full application pytest suite with `dev` + `engine` extras and JUnit | 394 passed, no failures/errors/skips; 68 core and 326 real-engine cases, including 17 new operator cases |
+| `pytest --collect-only -q -m engine` | Confirmed 326 real-engine cases without rerunning tests |
+| `ruff check .` and `ruff format --check .` | Passed; 42 files |
+| `npm run check` | TypeScript and Prettier passed |
+| `npm run test:browser -- jobs.spec.ts` | Eight real Chrome/API job cases passed across DPR 1/2; actual operator CLI now proves pending → current validated → historical results |
+| Actual module CLI smoke | One current job from generated synthetic browser data validated with one send; exam/approval history unchanged |
+| Final JUnit, helper shutdown, links/fences/selectors and `git diff --check` | 394 clean Python and eight focused browser cases; ports 18765/18766 closed; 189 executable Python selectors and four named browser workflows |
+
+The initial lint command stopped before pytest because new lines needed
+formatting. Ruff formatting resolved those diagnostics. The next focused run
+reported 110 passed and one assertion failure: an existing live execution claim
+correctly raises `JOB_CLAIMED`, not the test's assumed `CLAIM_IN_FLIGHT`.
+Only that assertion was corrected; the subsequent 111-case focused and final
+394-case full suites passed. No failed/stopped command is reported as a pass.
+
+The user explicitly approved one named check and one delivery/validation
+attempt per manual invocation, using dedicated synthetic dispatcher/worker
+identities rather than the teacher identity, without polling or sleeping.
+The command touches only the named development-tenant job and preserves the
+existing three-attempt 5/30-second transport policy and five-minute fencing.
+Unknown sends cannot authorize early validation; live claims block duplicate
+execution. Expiry permits a later manual recovery, not forced parser termination.
+Completed current results recover from protected confirmed delivery with no
+queue-buffer dependency or resend/revalidation. This is not production queue
+durability, operator authentication, isolation or a throughput guarantee.
+
+Output projects only present/absent counts, PDF pages and rubric total marks
+from the actual result, plus bounded control metadata; runtime errors emit
+codes without raw diagnostic/record data. Other tenants/recipients, arbitrary
+stages, missing development consent and missing/symlink database paths fail closed.
+Engine tests and browser operator fixtures prohibit network/Azure clients,
+engine approval actions and grading. The actual module smoke also made no AI
+call; this stage contains no model configuration or inference action.
+
+No dependency manifest, frontend runtime source or workflow changed. The prior
+34-case full browser/build/geometry results remain historical, not fresh full
+web runs. Existing CI automatically discovers the new Python cases and revised
+browser workflow; hosted evidence remains for `9316676` only.
+
+The preceding teacher UI was committed after explicit approval as `c1fe123`,
+not pushed. This operator increment and handoff remain uncommitted pending
+review. No deployment, real student data, paid calls or push occurred.
+
 ## Local foundation regression cases
 
 - [x] `tests/test_auth.py::test_valid_delegated_token`: signed delegated token accepted.
@@ -602,10 +655,11 @@ entrypoint needs an explicit bounded identity/scope decision.
 
 1. Run the required commands above and inspect `git status --short`.
 2. Do not treat locally committed or untracked implementation as already published.
-3. Next bounded task: an explicitly bounded local offline operator entrypoint
-  connecting existing reconciliation/delivery/one-shot validation components.
-  Agree its trusted synthetic dispatcher/worker identity and one-shot scope
-  before implementation; never turn teacher HTTP into worker authority. No worker
+3. Next bounded task: persist a reproducible synthetic teacher-request/manual
+  operator/current-and-historical-result live smoke path, using the approved
+  one-job/one-attempt operator scope. Preserve existing default smoke behavior
+  and require explicit flags for operator execution. Never turn teacher HTTP
+  into worker authority. No worker
   HTTP authentication or paid-stage admission should be inferred. Preserve
   the approved three-attempt 5/30-second transport policy, separate five-minute
   send/execution fences, immutable reconciliation holds and result reuse.
@@ -1031,3 +1085,29 @@ background queue loop or real transport is added.
 - [x] Duplicate React-key regression guard; input/job panel identities are distinct.
 - [ ] Production sign-in/school UX, browser accessibility evaluation, real queue/
   operator/runtime identities and paid grading workflows.
+
+## Bounded synthetic operator cases
+
+- [x] `tests/test_operator.py::test_cli_validates_one_real_job_and_fresh_invocation_reuses_result`:
+  with/without attendance, real read-only validation, unchanged human authority,
+  fixed worker identity, fresh-invocation component recovery and zero resend/revalidation.
+- [x] `tests/test_operator.py::test_cli_requires_development_before_touching_database`.
+- [x] `tests/test_operator.py::test_cli_cannot_select_tenant_recipient_or_paid_stage`.
+- [x] `tests/test_operator.py::test_operator_fixed_development_tenant_cannot_touch_foreign_job`.
+- [x] `tests/test_operator.py::test_named_reconciliation_never_sends_held_or_cancelled_job_or_touches_another`:
+  stale/cancelled/corrupt named job, immutable evidence and no other-job mutation.
+- [x] `tests/test_operator.py::test_operator_one_send_per_call_preserves_retry_waits_and_terminal_cap`:
+  no sleeping, 5/30-second eligibility, no early send and no fourth attempt.
+- [x] `tests/test_operator.py::test_unknown_enqueue_ack_does_not_authorize_early_validation`.
+- [x] `tests/test_operator.py::test_unknown_send_exception_is_redacted_and_live_send_is_not_retried`.
+- [x] `tests/test_operator.py::test_failed_validation_keeps_fence_until_expiry_then_manual_call_recovers`.
+- [x] `tests/test_operator.py::test_operator_cannot_take_over_another_worker_assignment`.
+- [x] `tests/test_operator.py::test_named_reconciliation_requires_actual_dispatcher_role`.
+- [x] `tests/test_operator.py::test_operator_rejects_missing_or_symlink_database_before_initialization`.
+- [x] Existing real-browser job workflow now invokes the operator CLI under
+  network/client/approval/grading prohibitions and verifies pending → current
+  validated → historical result, paging and unchanged exam/approval records.
+- [x] Actual module CLI smoke against generated synthetic browser data:
+  one current job, one send and unchanged exam/history.
+- [ ] Durable queue/transport receipt recovery, production operator/worker auth,
+  parsing isolation/timeouts, capacity guarantees, deployment and paid stages.
